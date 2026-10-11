@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Mac/Linux twin of submit_to_fork.ps1: publish team/ (without docs/) and the facetime edits to the PUBLIC fork.
 set -euo pipefail
-PUBLIC=https://github.com/imperorrp/brodie-starter-brodiegroove.git
+PUBLIC=https://github.com/imperorrp/ivyhacks-brodiegroove.git
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 if [ -n "$(git -C "$root" status --porcelain -- team facetime)" ]; then echo "Commit (and push to the private repo) your team/ and facetime changes first." >&2; exit 1; fi
 git -C "$root" fetch "$PUBLIC" main
 wt="$(dirname "$root")/brodie-submit"
 [ -d "$wt" ] && git -C "$root" worktree remove --force "$wt"
 git -C "$root" worktree add --detach "$wt" FETCH_HEAD
+git -C "$wt" rm -r -q --ignore-unmatch team facetime     # so files removed from main (e.g. research-licensed keys) leave the public tree too
 git -C "$wt" checkout main -- team facetime requirements.txt .gitignore vercel.json README.md
 rm -rf "$wt/team/docs"
 git -C "$wt" add -A

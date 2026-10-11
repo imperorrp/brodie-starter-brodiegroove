@@ -1,5 +1,5 @@
 # Publish team/web/groove as the gh-pages branch of the PUBLIC fork (GitHub Pages). Force-pushes a generated branch; safe to re-run.
-$PUBLIC = 'https://github.com/imperorrp/brodie-starter-brodiegroove.git'
+$PUBLIC = 'https://github.com/imperorrp/ivyhacks-brodiegroove.git'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $site = Join-Path $root 'team\web\site'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("brodie-site-" + [guid]::NewGuid().ToString('N'))
