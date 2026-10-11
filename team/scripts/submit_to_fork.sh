@@ -8,7 +8,7 @@ git -C "$root" fetch "$PUBLIC" main
 wt="$(dirname "$root")/brodie-submit"
 [ -d "$wt" ] && git -C "$root" worktree remove --force "$wt"
 git -C "$root" worktree add --detach "$wt" FETCH_HEAD
-git -C "$wt" checkout main -- team facetime requirements.txt .gitignore
+git -C "$wt" checkout main -- team facetime requirements.txt .gitignore vercel.json
 rm -rf "$wt/team/docs"
 git -C "$wt" add -A
 git -C "$wt" commit -m "Add the Brodie Groove skill: dance engine, backend, web, worker fixes" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"

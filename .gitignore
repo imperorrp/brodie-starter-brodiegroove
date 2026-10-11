@@ -36,3 +36,4 @@ notes/
 team/docs/
 team/PROGRESS.md
 team/PROGRESS_REPORT_v*.md
+!team/web/groove/assets/*.png

@@ -25,6 +25,18 @@ Defaults: key `aist_wa_110_ch01` (AIST++ waack basic move, arm-led, good for a d
 (desk webcam sees the upper body only). Flags: `-Key`, `-Mode learn|battle|telephone|class`, `-Code 1234` (join a duel, chain or
 class), `-Facing user|environment`, `-MinVisible 0.6` (whole-body phone test), `-Rtt 0.3`, `-NoOpen` (print only).
 
+## Demo mode and the dispatch name (read this if the worker is on the Chert line)
+
+While the worker runs under the Chert dispatch name (`dance_loop.ps1 -AgentName ...`), a Chrome room only reaches it when the
+link carries that dispatch. `chrome.ps1` and `link_local.ps1` do this automatically through `team/scripts/mint_link.py` (it
+reads `AGENT_NAME` from `.env.local`); the old `facetime/mint_token.py` links will not.
+
+`.\team\scripts\chrome.ps1 -Demo` names the room `demo-desk-...`: Brodie skips the chat, the offer and the ready check and
+goes straight from the camera check into one routine (good for filming), and the camera check is arms-only on the laptop.
+Without `-Demo` the full flow runs: Brodie chats, suggests a routine, waits for your yes, checks the camera (head to hips),
+asks about space, then waits for "ready" or both hands up. In both cases the teaching ladder waits for you to say **"ready"**
+(or "again") after each demonstration.
+
 ## In Chrome
 
 1. The first time, Chrome shows "Your connection is not private" (our certificate is self-signed): click **Advanced**, then
@@ -87,6 +99,24 @@ then `http://127.0.0.1:8787/dance/class/<code>/page` (the worker writes to the s
 
 Close the worker window and the server window, or `.\team\scripts\chrome.ps1 -Restart ...` to replace the worker. The link and
 token expire after an hour; run the script again for a fresh room.
+
+## The real FaceTime line, from this Windows laptop
+
+The Chert CLI supports macOS and Linux only, so it runs here through a small preload (`team/scripts/chert.ps1`). Two terminals,
+inside a booked slot (the line is shared, one team at a time):
+
+```
+.\team\scripts\dance_loop.ps1 -AgentName dance-battle-agent-ivyhacks    # Terminal A: the worker under the dispatch name, auto-restarted
+.\team\scripts\chert.ps1 doctor                                          # read-only: session, project, line, LiveKit
+.\team\scripts\chert.ps1 dev --agent dance-battle-agent-ivyhacks         # Terminal B: claims the line; wait for "Connected to Chert"
+```
+Do not run `chert doctor --agent ...` while `chert dev` is up: the test room it creates and deletes can crash the worker's
+LiveKit library on Windows (the loop restarts it, but a call in that moment would be declined). Run the agent test before
+`chert dev`, or not at all once the warm room shows up in Terminal A.
+Then FaceTime video-call (310) 279-2297 from a phone; Terminal A prints `bound to 'chert-bridge-...' 1280x720` when the call
+lands. Hang up, Ctrl-C Terminal B and wait for "Stopped" to release the line. Signed in already (`chert whoami`); to sign in
+again: `.\team\scripts\chert.ps1 login --device` and enter the code at https://facetime.trychert.com/cli. With the worker on
+the dispatch name, the Chrome page's automatic dispatch does not pick it up: `.\team\scripts\chrome.ps1 -Restart` swaps back.
 
 ## The same path with nobody on camera
 

@@ -367,6 +367,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
       <a href="#faq">FAQ</a>
     </div>
     <div class="bpm-pill" title="Everything on this page moves to this beat"><i></i><span id="navBpm">100</span>&nbsp;BPM</div>
+    <a class="btn btn-ghost btn-sm waitlist-link" href="#">Join the waitlist</a>
     <a class="btn btn-volt btn-sm call-link" href="#call">Call Brodie</a>
   </div>
 </nav>
@@ -387,6 +388,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
       <div class="cta-row reveal d3">
         <button class="btn btn-volt" id="beatBtn"><span class="eq"><span></span><span></span><span></span></span><span id="beatLbl">Drop the beat</span></button>
         <a class="btn btn-ghost" href="#play">Try the 16-beat challenge →</a>
+        <a class="btn btn-ghost waitlist-link" href="#">Join the waitlist</a>
       </div>
       <div class="bpm-ctl reveal d4">
         <label for="bpm">TEMPO</label>
@@ -618,7 +620,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
       <div>
         <h2>Your first <span style="white-space:nowrap">8-count</span><br>is one call away.</h2>
         <p>Say hi, tell Brodie what you're into, and he'll pick a routine for you. Got a challenge code from a friend? Enter it here and say it on the call.</p>
-        <div class="cta-row"><a class="btn btn-dark call-link" href="#call">Call Brodie now</a><a class="btn btn-ghost" style="border-color:rgba(10,10,11,.3)" href="#play">Warm up first</a></div>
+        <div class="cta-row"><a class="btn btn-dark call-link" href="#call">Call Brodie now</a><a class="btn btn-ghost waitlist-link" style="border-color:rgba(10,10,11,.3)" href="#">Join the waitlist</a><a class="btn btn-ghost" style="border-color:rgba(10,10,11,.3)" href="#play">Warm up first</a></div>
         <form class="codebox" id="codeForm" autocomplete="off">
           <input id="codeIn" inputmode="numeric" maxlength="4" placeholder="0000" aria-label="Four-digit challenge code">
           <button class="btn btn-dark btn-sm" type="submit">Lock in code</button>
@@ -642,6 +644,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
 <script>
 'use strict';
 const CALL_URL = '';  // set to the real call link; empty keeps the buttons scrolling to #call
+const WAITLIST_URL = 'https://forms.gle/dZ7rSLHjGAEncSzc8';  // the Google Form (team/docs/waitlist-form.md); every .waitlist-link opens it
 const C = { volt: '#D9FF3D', pink: '#FF3DA8', cyan: '#3DE0FF', amber: '#FFB13D', red: '#FF4D5E', paper: '#F4F4F0', ink: '#0A0A0B', mut: '#9A9DA4' };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -651,6 +654,7 @@ const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const root = document.documentElement;
 
 if (CALL_URL) $$('.call-link').forEach(a => { a.href = CALL_URL; a.target = '_blank'; a.rel = 'noopener'; });
+$$('.waitlist-link').forEach(a => { a.href = WAITLIST_URL; a.target = '_blank'; a.rel = 'noopener'; });
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
