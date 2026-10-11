@@ -19,3 +19,7 @@ livekit-api>=1.0
 livekit-agents==1.8.5   # facetime/worker.py: the LiveKit Agents worker the Chert CLI dispatches by name (pins openai<3; only facetime/cues_tts.py imports openai)
 livekit-plugins-google==1.8.5   # facetime/voice.py: Gemini Live (google.beta.realtime.RealtimeModel, voice Puck) for --voice gemini; same version as livekit-agents
 sounddevice   # facetime/webcam_local.py speaker output (needs PortAudio; bundled in the macOS wheel)
+
+# team dance game layer: real type on the HUD, scorecard QR
+pillow==12.3.0
+segno==1.6.6

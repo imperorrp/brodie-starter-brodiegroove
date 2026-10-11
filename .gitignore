@@ -18,6 +18,21 @@ models/
 .env
 .env.*
 *.jsonl
+.claude/settings.local.json
 
 !.env.example
 !assets/avatar/*.png
+
+# team: secrets and generated artefacts
+team/.go_url
+team/dance/library/gen_*.json
+data/tmp/sessions/
+!team/dance/assets/brodie/*.png
+
+# private notes and research: never in git (shared outside git)
+research/
+research_papers_*.md
+notes/
+team/docs/
+team/PROGRESS.md
+team/PROGRESS_REPORT_v*.md

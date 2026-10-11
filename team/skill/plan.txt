@@ -1,0 +1,2 @@
+# Our session plan (name:count, comma separated or one per line). Validated counters: squats, pushups, lunges, jumping jacks.
+squats:10,pushups:8

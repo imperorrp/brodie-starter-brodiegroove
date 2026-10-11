@@ -1,0 +1,13 @@
+[
+  {"v": "1", "t": 0.0, "t_wall": 1791526455.0, "seq": 0, "type": "session", "frame": 0, "state": "wait", "exercise": "squats", "target": 3, "count": 0, "item": 0, "done": false, "mode": "plan"},
+  {"v": "1", "t": 4.5, "t_wall": 1791526459.5, "seq": 1, "type": "session", "frame": 45, "state": "active", "exercise": "squats", "target": 3, "count": 0, "item": 0, "done": false, "mode": "plan"},
+  {"v": "1", "t": 7.5, "t_wall": 1791526462.5, "seq": 2, "type": "fault", "frame": 75, "label": "squats - shallow", "cue_text": "Sink lower", "p": 0.545},
+  {"v": "1", "t": 11.9, "t_wall": 1791526466.9, "seq": 3, "type": "rep", "frame": 119, "exercise": "squats", "n": 1, "confidence": {"agree": 1.0, "amp": 1.8, "trackers": 3}, "turning_t": 11.7, "lag_s": 0.2},
+  {"v": "1", "t": 11.9, "t_wall": 1791526466.9, "seq": 4, "type": "cue", "frame": 119, "text": "One", "intent": "count", "why": "", "state": "active", "exercise": "squats", "count": 1, "t_session": 11.9},
+  {"v": "1", "t": 14.6, "t_wall": 1791526469.6, "seq": 5, "type": "rep", "frame": 146, "exercise": "squats", "n": 2, "confidence": {"agree": 1.0, "amp": 1.7, "trackers": 3}, "turning_t": 14.4, "lag_s": 0.2},
+  {"v": "1", "t": 14.6, "t_wall": 1791526469.6, "seq": 6, "type": "cue", "frame": 146, "text": "Two", "intent": "count", "why": "", "state": "active", "exercise": "squats", "count": 2, "t_session": 14.6},
+  {"v": "1", "t": 17.2, "t_wall": 1791526472.2, "seq": 7, "type": "rep", "frame": 172, "exercise": "squats", "n": 3, "confidence": {"agree": 0.67, "amp": 1.5, "trackers": 3}, "turning_t": 17.0, "lag_s": 0.2},
+  {"v": "1", "t": 17.2, "t_wall": 1791526472.2, "seq": 8, "type": "cue", "frame": 172, "text": "That's three, nice work", "intent": "milestone", "why": "", "state": "active", "exercise": "squats", "count": 3, "t_session": 17.2},
+  {"v": "1", "t": 17.3, "t_wall": 1791526472.3, "seq": 9, "type": "session", "frame": 173, "state": "rest", "exercise": null, "target": 3, "count": 3, "item": 0, "done": false, "mode": "plan"},
+  {"v": "1", "t": 22.3, "t_wall": 1791526477.3, "seq": 10, "type": "session", "frame": 223, "state": "done", "exercise": null, "target": null, "count": 3, "item": 1, "done": true, "mode": "plan"}
+]

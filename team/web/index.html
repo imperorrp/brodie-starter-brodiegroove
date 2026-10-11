@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Brodie</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0b0b0b; color: #f2f2f2; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  pre { background: #1a1a1a; padding: 12px; border-radius: 8px; overflow-x: auto; }
+</style>
+</head>
+<body>
+  <h1>Team Brodie</h1>
+  <p>Placeholder page. Shows the last call from the backend (<code>/sessions/last</code>).</p>
+  <pre id="out">loading...</pre>
+<script>
+const BACKEND = new URLSearchParams(location.search).get('backend') || 'http://127.0.0.1:8787';
+fetch(BACKEND + '/sessions/last').then(r => r.json()).then(j => { document.getElementById('out').textContent = JSON.stringify(j, null, 2); })
+  .catch(e => { document.getElementById('out').textContent = 'backend not reachable at ' + BACKEND + ' (' + e + ')'; });
+</script>
+</body>
+</html>

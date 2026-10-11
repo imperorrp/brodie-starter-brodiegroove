@@ -211,7 +211,8 @@ class Bridge:
         print(f'[bridge] published video track {VIDEO_TRACK_NAME} {W}x{H} at {a.fps:g} fps, max {a.max_bitrate / 1e6:.1f} Mbps '
               f'(simulcast {a.simulcast}: the SDK adds half and quarter layers; the agent asks for the lowest)', flush=True)
         for sig in (signal.SIGINT, signal.SIGTERM):
-            self.loop.add_signal_handler(sig, self.stopping.set)
+            try: self.loop.add_signal_handler(sig, self.stopping.set)
+            except NotImplementedError: pass                      # Windows: asyncio has no signal handlers; Ctrl-C raises KeyboardInterrupt instead
         await self.wait_for_agent()
         t0, t_end, k = await self.send(source, fr)
         await asyncio.sleep(a.tail)

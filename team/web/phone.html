@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brodie dance: phone page</title>
+<!--
+Any browser stands in for the FaceTime caller: Chrome on Android, Chrome on a laptop, Safari on an iPhone.
+Joins the LiveKit room with the token, publishes the camera (and the microphone, so you can talk to Brodie), shows whatever
+Brodie publishes as video (the ghost, the timeline, the score) full size, and plays his audio.
+Query string: ?url=wss://...&token=...&facing=environment|user   (team/scripts/link_local.ps1 prints the whole thing)
+  After Join the page is clean by default (Brodie's video full screen, small mic/camera dots, four big buttons: Pause, Repeat,
+  Slower, Stop, sent to Brodie as LiveKit data messages). &debug=1 keeps the status bar; tap the top-right corner for the panel.
+  FaceTime callers don't have these buttons; they use their voice or gestures. This page is the Chrome test path.
+Camera access needs a secure context: https (team/scripts/serve_web.py, self-signed) or file:// on a laptop.
+-->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.22.3/dist/livekit-client.umd.min.js"></script>
+<style>
+  :root { --bg:#0A0A0B; --fg:#F4F4F0; --mut:#9A9DA4; --accent:#D9FF3D; --bad:#ff7b72; --line:#2A2C31; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui, -apple-system, sans-serif; }
+  #stage { position:relative; width:100vw; height:100vh; height:100dvh; background:#000; overflow:hidden; }
+  #coach { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
+  #preview { position:absolute; right:10px; bottom:10px; width:28vw; max-width:160px; aspect-ratio:9/16; object-fit:cover; border:2px solid var(--line); border-radius:10px; background:#111; }
+  #bar { position:absolute; left:0; right:0; top:0; display:flex; gap:10px; align-items:center; padding:8px 12px; background:rgba(0,0,0,.45); font-size:13px; color:var(--mut); }
+  #bar b { color:var(--fg); font-weight:600; }
+  #panel { position:absolute; left:0; right:0; bottom:0; padding:12px; background:rgba(10,10,11,.92); border-top:1px solid var(--line); }
+  #panel.hidden { display:none; }
+  label { display:block; font-size:12px; color:var(--mut); margin-top:6px; }
+  input, select { width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--fg); font-size:14px; }
+  button { padding:12px 16px; border:0; border-radius:8px; background:var(--accent); color:#000; font-size:16px; font-weight:700; margin-top:10px; }
+  button.secondary { background:var(--line); color:var(--fg); }
+  #log { font:11px/1.35 ui-monospace, monospace; white-space:pre-wrap; max-height:22vh; overflow:auto; color:var(--mut); margin-top:8px; }
+  .ok { color:var(--accent); } .bad { color:var(--bad); }
+  body.clean #bar, body.clean #panel, body.clean #preview { display:none; }
+  body.clean.peek #bar { display:flex; } body.clean.peek #preview { display:block; } body.clean.peek #panel:not(.hidden) { display:block; }
+  #corner { position:absolute; right:0; top:0; width:64px; height:64px; z-index:5; }
+  #dock { position:absolute; left:0; right:0; bottom:max(14px, env(safe-area-inset-bottom)); display:none; justify-content:center; gap:12px; z-index:6; }
+  body.joined #dock { display:flex; }
+  #dock button { margin:0; min-width:72px; min-height:56px; padding:10px 14px; border-radius:999px; background:rgba(31,33,38,.88); color:var(--fg);
+                 font:700 15px/1 system-ui, sans-serif; border:2px solid #2A2C31; }
+  #dock button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  #dock button.primary { background:var(--accent); color:#000; border-color:var(--accent); }
+  #dots { position:absolute; left:12px; top:max(10px, env(safe-area-inset-top)); display:none; gap:8px; z-index:6; font:600 12px system-ui; color:var(--fg); }
+  body.joined #dots { display:flex; }
+  #dots span { background:rgba(10,10,11,.7); padding:4px 8px; border-radius:999px; }
+  #dots i { display:inline-block; width:8px; height:8px; border-radius:50%; background:#666; margin-right:6px; }
+  #dots i.on { background:var(--accent); } #dots i.off { background:var(--bad); }
+  #toast { position:absolute; left:50%; top:40%; transform:translateX(-50%); max-width:86vw; background:rgba(31,33,38,.95); color:var(--fg);
+           padding:16px 18px; border-radius:14px; font:600 16px/1.35 system-ui; display:none; z-index:7; text-align:center; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="coach" autoplay playsinline muted></video>
+  <video id="preview" autoplay playsinline muted></video>
+  <div id="corner" aria-label="show controls" title="show controls"></div>
+  <div id="dots" aria-live="polite"><span><i id="micdot"></i>mic</span><span><i id="camdot"></i>camera</span></div>
+  <div id="dock" role="toolbar" aria-label="Session controls">
+    <button data-cmd="pause" aria-label="Pause or resume">Pause</button>
+    <button data-cmd="repeat" aria-label="Repeat this step">Repeat</button>
+    <button data-cmd="slower" aria-label="Slower">Slower</button>
+    <button data-cmd="stop" class="primary" aria-label="Stop">Stop</button>
+  </div>
+  <div id="toast" role="alert"></div>
+  <div id="bar"><span>Brodie dance</span><span id="state">idle</span><span>coach video: <b id="cv">no</b></span><span>audio: <b id="au">no</b></span><button id="toggle" class="secondary" style="margin:0;padding:4px 10px;font-size:12px">panel</button></div>
+  <div id="panel">
+    <label>LiveKit URL <input id="url" placeholder="wss://your-project.livekit.cloud"></label>
+    <label>Token <input id="token" placeholder="paste the minted token"></label>
+    <label>Camera <select id="facing"><option value="environment">back (propped phone, whole body)</option><option value="user">front (laptop / selfie)</option></select></label>
+    <button id="join">Join: camera + mic on, Brodie on screen</button>
+    <button id="leave" class="secondary" disabled>Leave</button>
+    <button id="unmute" class="secondary" style="display:none">Tap to enable Brodie's audio</button>
+    <div id="log"></div>
+  </div>
+</div>
+<script>
+const q = new URLSearchParams(location.search); const $ = id => document.getElementById(id);
+for (const k of ['url', 'token']) if (q.get(k)) $(k).value = q.get(k);
+if (q.get('facing')) $('facing').value = q.get('facing');
+const log = m => { const t = new Date().toISOString().slice(11, 23); $('log').textContent = `${t} ${m}\n` + $('log').textContent; };
+let room = null, audioEls = [], camTrack = null, micTrack = null;
+$('toggle').onclick = () => $('panel').classList.toggle('hidden');
+
+async function join() {
+  const LK = window.LivekitClient; if (!LK) { log('livekit-client failed to load'); return; }
+  const url = $('url').value.trim(), token = $('token').value.trim();
+  if (!url || !token) { log('url and token are required'); return; }
+  $('join').disabled = true; $('state').textContent = 'connecting';
+  room = new LK.Room({ adaptiveStream: false, dynacast: false });
+  room.on(LK.RoomEvent.ParticipantConnected, p => log('joined: ' + p.identity));
+  room.on(LK.RoomEvent.ParticipantDisconnected, p => log('left: ' + p.identity));
+  room.on(LK.RoomEvent.TrackSubscribed, (track, pub, p) => {
+    log(`subscribed ${pub.kind} "${pub.trackName}" from ${p.identity}`);
+    if (track.kind === 'video') { track.attach($('coach')); $('cv').textContent = 'yes'; $('cv').className = 'ok'; }
+    if (track.kind === 'audio') {
+      const el = track.attach(); el.autoplay = true; document.body.appendChild(el); audioEls.push(el);
+      el.play().then(() => { $('au').textContent = 'playing'; $('au').className = 'ok'; }).catch(() => { $('unmute').style.display = 'inline-block'; $('au').textContent = 'tap to enable'; });
+    }
+  });
+  room.on(LK.RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === 'audio') track.detach().forEach(e => e.remove()); if (track.kind === 'video') { track.detach(); $('cv').textContent = 'no'; $('cv').className = ''; } });
+  room.on(LK.RoomEvent.Disconnected, () => { $('state').textContent = 'disconnected'; $('join').disabled = false; $('leave').disabled = true; });
+  try {
+    await room.connect(url, token);
+    log('connected as ' + room.localParticipant.identity + '; room ' + room.name); $('state').textContent = 'connected';
+    try { camTrack = await LK.createLocalVideoTrack({ facingMode: $('facing').value, resolution: { width: 1280, height: 720 } }); $('camdot').className = 'on'; }
+    catch (e) { $('camdot').className = 'off'; toast('Camera blocked. Allow camera access (the camera icon in the address bar), then tap Join again. Brodie needs to see you to coach.'); throw e; }
+    await room.localParticipant.publishTrack(camTrack, { name: 'facetime-remote-video', source: LK.Track.Source.Camera, simulcast: false });
+    camTrack.attach($('preview')); log('camera published (single layer)');
+    try {
+      micTrack = await LK.createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true });
+      await room.localParticipant.publishTrack(micTrack, { name: 'facetime-remote-audio', source: LK.Track.Source.Microphone });
+      log('microphone published'); $('micdot').className = 'on';
+    } catch (e) { log('microphone not published: ' + e); $('micdot').className = 'off'; toast('Microphone blocked. Allow it in the address bar so Brodie can hear you, or use the buttons.'); }
+    $('leave').disabled = false; $('panel').classList.add('hidden');
+    document.body.classList.add('joined');
+    if (q.get('debug') !== '1') document.body.classList.add('clean');
+  } catch (e) { log('join failed: ' + e); $('state').textContent = 'error'; $('join').disabled = false; }
+}
+async function leave() { document.body.classList.remove('joined'); if (room) { await room.disconnect(); room = null; } audioEls.forEach(e => e.remove()); audioEls = []; if (camTrack) camTrack.stop(); if (micTrack) micTrack.stop(); $('join').disabled = false; $('leave').disabled = true; $('panel').classList.remove('hidden'); }
+$('join').onclick = join; $('leave').onclick = leave;
+function toast(m) { const t = $('toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', 7000); }
+document.querySelectorAll('#dock button').forEach(b => b.onclick = async () => {
+  if (!room) return;
+  try { await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: 'dance_cmd', cmd: b.dataset.cmd })), { reliable: true }); log('sent ' + b.dataset.cmd); }
+  catch (e) { log('button failed: ' + e); }
+});
+$('corner').onclick = () => { if (document.body.classList.contains('clean')) { document.body.classList.toggle('peek'); if (!document.body.classList.contains('peek')) $('panel').classList.add('hidden'); } };
+$('unmute').onclick = async () => { for (const el of audioEls) { try { await el.play(); $('au').textContent = 'playing'; $('au').className = 'ok'; } catch (e) { log('audio play failed: ' + e); } } $('unmute').style.display = 'none'; };
+if (q.get('autojoin') === '1' && $('url').value && $('token').value) join();
+</script>
+</body>
+</html>

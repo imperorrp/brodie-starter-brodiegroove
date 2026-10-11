@@ -505,7 +505,7 @@ class GeminiModel:
     def generate(self, prompt):
         if self.session is None: return None
         self.n_generate += 1
-        try: return self.session.generate_reply(instructions='(Private instruction for you, never say it aloud; answer the caller in your own words.) ' + prompt)   # 2026-10-10: he read the prompts verbatim
+        try: return self.session.generate_reply(instructions='(Private instruction, never read aloud. Your reply is only the words you speak to the caller: no plan, no narration, no "I need to", no restating the situation.) ' + prompt)   # 2026-10-10: he read the prompts verbatim; 2026-10-11: he narrated his reasoning first
         except RuntimeError as e: log.warning('generate_reply: %s', e); return None
 
     def interrupt(self):

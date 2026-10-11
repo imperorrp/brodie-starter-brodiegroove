@@ -1,0 +1,19 @@
+# team/ is tracked in the PRIVATE repo (brodie-starter-private). docs/ is included there on purpose.
+# team/scripts/submit_to_fork.* publishes team/ WITHOUT docs/ to the public fork. See team/docs/private-repo.md.
+__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+*.db-journal
+*.jsonl
+*.log
+.env
+.env.*
+!.env.example
+web/certs/
+recordings/*
+!recordings/README.md
+*.mp4
+*.mov
+*.wav
+*.npz

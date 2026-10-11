@@ -1,0 +1,106 @@
+{
+  "name": "brodie",
+  "version": "1.0.0",
+  "style": "flat 2D sticker, one flat fill per shape, thick even near-black outline, no gradients, no 3D",
+  "colors": {
+    "body": {
+      "hex": "#EFE7DA",
+      "lab": [
+        91.9,
+        0.5,
+        7.3
+      ],
+      "use": "head, hair tuft, arms, legs, tank lettering, dumbbell icon"
+    },
+    "ink": {
+      "hex": "#1A1919",
+      "use": "outline, eyebrows, eyes, tank top"
+    },
+    "white": {
+      "hex": "#FFFFFF",
+      "use": "teeth and white props (chef hat, pillow), only inside an outline"
+    },
+    "tan": {
+      "hex": "#C2A882",
+      "use": "speed marks, wooden props; never on the body"
+    }
+  },
+  "rejected_colors": {
+    "#F1E4D8": "pink drift (a* +2.8) from the original flex art",
+    "#F2E4D3": "pink drift (a* +2.0) from the old 512px pfp"
+  },
+  "locked": [
+    "body colour #EFE7DA including the hair tuft",
+    "black tank top with arched cream BRODIE lettering and small dumbbell icon, lettering always visible and readable",
+    "thick black bar eyebrows; solid black oval eyes or one closed wink arc",
+    "no nose, no ears, no cheeks, no blush",
+    "one mouth: big open grin with white teeth outlined in black, or one small closed smile",
+    "oversized round head about 45% of his height, three-lobe hair tuft",
+    "big muscular arms with round fists; short stubby legs, no feet detail, no shoes",
+    "flat fills with thick even outline"
+  ],
+  "costume_slots": {
+    "head": "one hat or band; tuft may peek out or hide",
+    "hands": "one prop per hand; props never cover the tank lettering",
+    "expression": "grin, smirk, wink, sleepy, focused",
+    "pose": "any full-body pose",
+    "prop_colors": "ink, cream, white, tan, plus natural colour on small props"
+  },
+  "references": {
+    "flex": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/reference/brodie-flex.png",
+    "sit_wave": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/reference/brodie-sit-wave.png"
+  },
+  "pfp": {
+    "round": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/pfp/brodie-pfp.png",
+    "square": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/pfp/brodie-pfp-square.png"
+  },
+  "prompt": {
+    "template": "Brodie as a [SKILL] coach: wearing [ONE HAT OR BAND], holding [PROP] in his [right/left] fist, [EXPRESSION], [POSE].",
+    "canon": "Same character as the reference images: Brodie, a chibi gym-buddy mascot. STYLE: flat 2D sticker illustration. One flat fill per shape, no gradients, no 3D, no texture. Thick, even, near-black outline (#1A1919) around every shape, with a few short interior contour strokes for muscles, the same weight as the references. BODY COLOUR (strict): bone/off-white cream, exactly hex #EFE7DA, the same cream as the references. NOT pink, NOT peach, NOT skin-tone, NOT salmon, NOT pure white, NOT yellow. No blush, no rosy cheeks, no pink tint anywhere on the body. ANATOMY: oversized round head (about 45% of his height) with a three-lobe tuft of hair on top in the same cream; thick black bar eyebrows; solid black oval eyes (one may be a closed wink arc); NO nose, NO ears, NO cheeks; one big open grin with white teeth outlined in black, or one small closed smile; muscular arms with round fists; short stubby legs, no feet detail, no shoes. OUTFIT: black tank top (#1A1919) with arched cream collegiate BRODIE lettering and a small cream dumbbell icon below it. The BRODIE lettering stays visible and readable. Costume pieces go ON TOP of the tank (hats, headbands, aprons that leave the lettering showing, props in hand); never replace the tank. COMPOSITION: one Brodie, full body, centred, generous margin, transparent-looking plain white background (#FFFFFF), no ground shadow, no scenery, no text other than BRODIE on the tank, no watermark.",
+    "usage": "Send template line (filled in) + ' ' + canon, with BOTH reference images attached."
+  },
+  "qa": {
+    "tool": "tools/check_cream.py",
+    "measure": "median CIELAB of cream body pixels",
+    "a_star": [
+      -1.5,
+      1.8
+    ],
+    "b_star": [
+      5.0,
+      11.0
+    ],
+    "max_ab_distance_from_canon": 3.0,
+    "lightness": "not checked",
+    "manual": "a person or vision model still checks lettering visibility and face kit"
+  },
+  "examples": {
+    "macros-chef": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/examples/macros-chef.png",
+    "sleep-recovery": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/examples/sleep-recovery.png",
+    "cardio-runner": "https://raw.githubusercontent.com/seraphimlabs-dev/brodie-character-kit/main/examples/cardio-runner.png"
+  },
+  "brand": {
+    "source": "getbrodie.com",
+    "use": "everything around Brodie: backgrounds, captions, buttons, pfp rings; never on his body",
+    "volt": {
+      "hex": "#D9FF3D",
+      "use": "the one bright accent, black text on it"
+    },
+    "ground": {
+      "hex": "#0A0A0B",
+      "use": "default background"
+    },
+    "panel": {
+      "hex": "#1F2126",
+      "use": "cards and caption bars"
+    },
+    "grey": {
+      "hex": "#8E9198",
+      "use": "secondary text"
+    },
+    "fonts": {
+      "display": "Archivo 800, lowercase, tight tracking",
+      "body": "Plus Jakarta Sans"
+    }
+  }
+}
