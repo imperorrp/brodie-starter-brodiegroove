@@ -5,7 +5,7 @@ your own body, scores every count PERFECT / NICE / MISS, gives you one tip at a 
 It plays like a rhythm game, not a class.
 
 Built on the [Brodie starter](docs/STARTER_README.md) (Seraphim Labs) for the IvyHacks **Health x FaceTime** hackathon,
-Penn, Oct 10 to 11, 2026. Team **Beat Muse**. Everything we added lives in [`team/`](team/); the starter is untouched apart
+Penn, Oct 10 to 11, 2026. Team **BrodieGroove**. Everything we added lives in [`team/`](team/); the starter is untouched apart
 from three small worker fixes.
 
 [![Brodie Groove landing page](team/media/site_hero.png)](https://brodiegroove.vercel.app/)
@@ -154,4 +154,4 @@ a backend with codes and boards, a landing page, any-browser testing, and the Ch
   Wikimedia Commons, CC BY 4.0; "PM plus size dancer" by Warmglow, CC BY-SA 4.0.
 - Fonts: Archivo Black, Plus Jakarta Sans, Space Grotesk (SIL OFL). QR codes: segno (BSD).
 
-Team Beat Muse, IvyHacks 2026.
+Team BrodieGroove, IvyHacks 2026.
