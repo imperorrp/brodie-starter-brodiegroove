@@ -2,7 +2,10 @@
 profiles (XP, level, streak, achievements, preferences, keyed by a spoken first name), and share/challenge tracking."""
 import json, os, sqlite3, threading
 
-DB_PATH = os.environ.get('TEAM_DB', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'team.db'))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+# TEAM_DB overrides. On Vercel the package directory is read-only, so the default moves to /tmp (ephemeral: resets on a
+# cold start and is not shared between instances; a hosted database is the real fix for a public deployment).
+DB_PATH = os.environ.get('TEAM_DB') or (os.path.join('/tmp', 'team.db') if os.environ.get('VERCEL') else os.path.join(_HERE, 'team.db'))
 _lock = threading.Lock()
 
 
