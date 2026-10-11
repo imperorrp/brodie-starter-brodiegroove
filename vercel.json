@@ -1,52 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "web": {
-      "root": "team/web/groove/",
-      "cleanUrls": true
-    },
-    "api": {
-      "root": "team/",
-      "framework": "fastapi",
-      "entrypoint": "vercel_app:app"
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/health",
-      "destination": {
-        "service": "api"
-      }
-    },
-    {
-      "source": "/metrics",
-      "destination": {
-        "service": "api"
-      }
-    },
-    {
-      "source": "/events(.*)",
-      "destination": {
-        "service": "api"
-      }
-    },
-    {
-      "source": "/sessions(.*)",
-      "destination": {
-        "service": "api"
-      }
-    },
-    {
-      "source": "/dance(.*)",
-      "destination": {
-        "service": "api"
-      }
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "service": "web"
-      }
-    }
-  ]
+  "outputDirectory": "team/web/groove",
+  "cleanUrls": true
 }
