@@ -6,17 +6,47 @@
       "cleanUrls": true
     },
     "api": {
-      "root": "team/backend/",
+      "root": "team/",
       "framework": "fastapi",
-      "entrypoint": "app:app"
+      "entrypoint": "vercel_app:app"
     }
   },
   "rewrites": [
-    { "source": "/health", "destination": { "service": "api" } },
-    { "source": "/metrics", "destination": { "service": "api" } },
-    { "source": "/events(.*)", "destination": { "service": "api" } },
-    { "source": "/sessions(.*)", "destination": { "service": "api" } },
-    { "source": "/dance(.*)", "destination": { "service": "api" } },
-    { "source": "/(.*)", "destination": { "service": "web" } }
+    {
+      "source": "/health",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/metrics",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/events(.*)",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/sessions(.*)",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/dance(.*)",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
   ]
 }
