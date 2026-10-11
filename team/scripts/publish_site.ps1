@@ -12,4 +12,4 @@ run -C $tmp add -A
 run -C $tmp commit -q -m ("Publish site " + (Get-Date -Format 'yyyy-MM-dd_HH:mm'))
 run -C $tmp push -f $PUBLIC gh-pages:gh-pages
 Remove-Item -Recurse -Force $tmp
-Write-Host "Published. Enable once: GitHub repo Settings > Pages > Deploy from a branch > gh-pages / root. URL: https://imperorrp.github.io/brodie-starter-brodiegroove/"
+Write-Host "Published. Enable once: GitHub repo Settings > Pages > Deploy from a branch > gh-pages / root. URL: https://brodiegroove.vercel.app/ (Vercel; the gh-pages branch is the fallback)"

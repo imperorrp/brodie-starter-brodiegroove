@@ -6,7 +6,8 @@
 # Options: -Key <library key> -Mode learn|battle|telephone|class -Facing user|environment -MinVisible 0.4 -Code 1234 -NoOpen -Restart -Record (save what Brodie shows, opt-in)
 # Guide: team\CHROME_TEST_GUIDE.md
 param([string]$Key = '', [string]$Mode = 'learn', [string]$Facing = '', [string]$MinVisible = '0.4', [string]$Code = '',
-      [switch]$Android, [switch]$NoOpen, [switch]$Restart, [switch]$Record, [int]$Port = 8443, [string]$Rtt = '0.3')
+      [switch]$Android, [switch]$NoOpen, [switch]$Restart, [switch]$Record, [switch]$Demo, [int]$Port = 8443, [string]$Rtt = '0.3')
+#   -Demo : the room skips the chat, offer and ready gates (one routine straight after the camera check); laptop rooms are arms-only
 . "$PSScriptRoot\env.ps1"
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 Set-Location $root
@@ -30,6 +31,8 @@ if ($worker -and $Restart) { $worker | ForEach-Object { Stop-Process -Id $_.Proc
 if ($worker) { "worker: running (pid $($worker[0].ProcessId)) with the key and mode it was started with; use -Restart -Key ... -Mode ... to change them" }
 else {
   $env:DANCE_KEY = $Key; $env:DANCE_MODE = $Mode; $env:DANCE_MIN_VISIBLE = $MinVisible; $env:DANCE_RTT = $Rtt
+  if (-not $env:DANCE_MAX_POSES) { $env:DANCE_MAX_POSES = '1' }     # solo: 4 poses at 384 px cost 237 ms a frame on this laptop (4 fps)
+  if (-not $env:DANCE_POSE_PX) { $env:DANCE_POSE_PX = '320' }
   if ($Record) { $env:DANCE_DEBUG_MP4 = 'data\tmp\dance_chrome.mp4' } else { Remove-Item env:DANCE_DEBUG_MP4 -ErrorAction SilentlyContinue }   # recording is opt-in
   $env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'
   if (-not $env:BACKEND_URL) { $env:BACKEND_URL = 'fake' }
@@ -41,18 +44,18 @@ else {
   Start-Sleep -Seconds 12
 }
 
-# 3. a room token and the links
-$room = 'dance-' + (Get-Date -Format 'MMdd-HHmmss')
-$token = (& $py -m facetime.mint_token --room $room | Select-Object -First 1).Trim()
-if (-not $token) { Write-Error 'could not mint a token (LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env.local?)'; return }
+# 3. a room token and the links (mint_link.py adds the named dispatch when AGENT_NAME is set, e.g. while the Chert line is up).
+#    Room-name prefixes steer the session: -Demo = 'demo-' (one routine, no chat gates), laptop = 'desk-' (arms-only camera check).
+$prefix = $(if ($Demo) { 'demo-' } else { '' }) + $(if ($Android) { 'dance' } else { 'desk' })
+$mintArgs = @('team\scripts\mint_link.py', '--prefix', $prefix, '--facing', $Facing, '--port', "$Port", '--json')
+if (-not $Android) { $mintArgs += '--localhost' }
+$link = (& $py @mintArgs | Select-Object -Last 1) | ConvertFrom-Json
+if (-not $link.page) { Write-Error 'could not mint a token (LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env.local?)'; return }
+$url = $link.page; $meet = $link.meet; $room = $link.room
 $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' -and $_.PrefixOrigin -ne 'WellKnown' } | Sort-Object InterfaceMetric | Select-Object -First 1).IPAddress
-$enc = [uri]::EscapeDataString
-$url = "https://$ip`:$Port/phone.html?url=$($enc.Invoke($env:LIVEKIT_URL))&token=$token&facing=$Facing"
-$meet = "https://meet.livekit.io/custom?liveKitUrl=$($enc.Invoke($env:LIVEKIT_URL))&token=$token"
-Set-Content -Path (Join-Path $root 'team\.go_url') -Value $url -Encoding ascii -NoNewline
 ''
-"room: $room   (the links carry a one-hour token for this room only; do not post them)"
-"short link (laptop or phone on this Wi-Fi):  https://$ip`:$Port/go"
+"room: $room   dispatch: $(if ($link.agent) { $link.agent } else { 'automatic' })   (the links carry a one-hour token for this room only; do not post them)"
+"short link: $($link.short)"
 if ($Android) {
   ''
   'On the phone: open the short link in Chrome, tap Advanced then Proceed on the certificate warning, allow camera and mic, tap Join.'

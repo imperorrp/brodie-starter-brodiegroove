@@ -17,3 +17,8 @@ recordings/*
 *.mov
 *.wav
 *.npz
+
+# AIST++-derived keys: research terms, never redistributed (rebuild with: python -m team.dance.ingest_aist)
+dance/library/aist_*.json
+dance/library/class_*.json
+dance/library/chain_*.json

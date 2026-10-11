@@ -37,3 +37,6 @@ team/docs/
 team/PROGRESS.md
 team/PROGRESS_REPORT_v*.md
 !team/web/groove/assets/*.png
+
+# README media for the public repo (screenshots, kit art already allowed above)
+!team/media/*.png

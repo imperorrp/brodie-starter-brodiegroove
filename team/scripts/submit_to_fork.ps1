@@ -9,7 +9,7 @@ run -C $root fetch $PUBLIC main
 $wt = Join-Path (Split-Path $root -Parent) 'brodie-submit'
 if (Test-Path $wt) { run -C $root worktree remove --force $wt }
 run -C $root worktree add --detach $wt FETCH_HEAD
-run -C $wt checkout main -- team facetime requirements.txt .gitignore vercel.json
+run -C $wt checkout main -- team facetime requirements.txt .gitignore vercel.json README.md
 Remove-Item -Recurse -Force (Join-Path $wt 'team\docs')
 run -C $wt add -A
 run -C $wt commit -m 'Add the Brodie Groove skill: dance engine, backend, web, worker fixes' -m 'Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>'

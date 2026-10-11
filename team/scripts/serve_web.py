@@ -1,6 +1,6 @@
 """Serve team/web over https on the LAN so a phone's browser can use its camera (secure context), with a self-signed certificate.
 
-  .venv\Scripts\python team\scripts\serve_web.py [--port 8443] [--ip 10.103.36.77]
+  .venv\Scripts\python team\scripts\serve_web.py [--port 8443] [--ip <laptop LAN ip>]
 Then open https://<laptop-ip>:8443/phone.html?url=...&token=... on the phone (accept the certificate warning once:
 Advanced -> proceed). team/scripts/link_local.ps1 prints the full URL. The certificate is generated into team/web/certs/ with
 openssl if missing (Git for Windows ships openssl: C:\\Program Files\\Git\\usr\\bin\\openssl.exe).

@@ -266,6 +266,11 @@ class DanceSession:
         self.mirror_view = (os.environ.get('DANCE_MIRROR_VIEW', '1') or '1').strip().lower() in ('1', 'true', 'yes', 'on')
         self.size = (W, H)                                       # the canvas; set from the caller's first frame (portrait phone or landscape webcam)
         self.lobby_enabled = (os.environ.get('DANCE_LOBBY', '1') or '1').strip() != '0'
+        # Per-call overrides from the room name, so one worker can serve the FaceTime line (full flow) and a Chrome demo room:
+        # 'demo-...' = one routine, no chat/offer/ready gates; 'desk-' anywhere = arms-only camera check (laptop webcam at a desk).
+        self.room_name = str(getattr(getattr(job, 'room', None), 'name', '') or '')
+        if self.room_name.startswith('demo-'): self.lobby_enabled = False
+        self.room_upper = ('desk-' in self.room_name) or (os.environ.get('DANCE_UPPER', '0') or '0').strip() == '1'
         self.style = None; self.upper_body = False; self.parts = {}; self.hint = None; self.hint_since = None
         self.mode_choice = None; self.mode_choice_pending = False    # a spoken mode word; the lobby reads it (learn/battle also reach pending_cmd mid-session)
         self.idle_title = 'Brodie'; self.idle_lines = []
@@ -285,7 +290,8 @@ class DanceSession:
         self.last_cmd = {}; self.last_result = None; self.last_cue = None; self.last_title = None; self.in_warmup = False
         self.combo_run = {}; self.last_tip_beat = {}; self.cur_engine = None; self.time_to_start = None; self.squad_since = None
         self.state = 'EXPLORE'; self.epoch = 0; self.say_q = []; self.speaker_task = None; self.activity_req = None; self.affirm_t = -1.0; self.deny_t = -1.0
-        self.cancel_req = False; self.hold_until = -1.0; self.space_ok = False; self.upper_override = False; self.luma = None; self.cur_lm = None
+        self.cancel_req = False; self.hold_until = -1.0; self.space_ok = False; self.upper_override = bool(getattr(self, 'room_upper', False)); self.luma = None; self.cur_lm = None
+        if self.upper_override: self.upper_body = True
         self.setup_ui = None; self.stage = None; self.ghost_overlay = True; self.practice = False; self.last_caller_text_t = -1e9; self.in_demo = False
         self.last_mode = None; self.last_key = None; self.stop_routine = False
         self.proposal = None; self.proposal_t = -1.0; self.coach_q_t = -1.0; self.line_end = {}; self.last_variant = {}; self.last_frame_t = -1.0
@@ -950,7 +956,8 @@ class DanceSession:
             print(f'[dance] DEV RECORDING ON: what the caller sees goes to {self.debug_mp4} (DANCE_DEBUG_MP4; never enable for real callers)', flush=True)
         STATE['session'] = self
         print(f"[dance] session: key {self.key['name']} ({self.key['bpm']:.0f} bpm, {len(self.key['phrases'])} phrases), mode {self.mode}, tempo {self.tempo}, rtt {self.rtt_s} s; "
-              f"difficulty {self.difficulty}; handle {'set' if self.handle else 'unset'}", flush=True)
+              f"difficulty {self.difficulty}; handle {'set' if self.handle else 'unset'}; room '{self.room_name}' -> "
+              f"{'DEMO (no chat gates)' if not self.lobby_enabled else 'full flow'}, {'arms only' if self.upper_override else 'whole body'}", flush=True)
         bank = getattr(self.job, 'bank', None)
         if bank is not None: dance_audio.register_sfx(bank)            # non-verbal sounds only: Gemini is the one voice
         self.task(self._apply_state_rules('EXPLORE'))

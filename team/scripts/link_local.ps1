@@ -1,4 +1,4 @@
-# A phone-page link for ANY browser (Chrome on Android or a laptop) via our own https page.  .\team\scripts\link_local.ps1 [-Room name] [-Ip 10.103.36.77] [-Port 8443] [-Facing environment|user]
+# A phone-page link for ANY browser (Chrome on Android or a laptop) via our own https page.  .\team\scripts\link_local.ps1 [-Room name] [-Ip <laptop LAN ip>] [-Port 8443] [-Facing environment|user]
 # Needs team\scripts\serve_web.py running (Terminal D) and the dance worker running (Terminal B). Prints the local URL (carries a token: do not post it)
 # and, as a zero-setup fallback, LiveKit's hosted Meet page which also shows Brodie's video.
 param([string]$Room = ('dance-' + (Get-Date -Format 'MMdd-HHmmss')), [string]$Ip = '', [int]$Port = 8443, [string]$Facing = 'environment')

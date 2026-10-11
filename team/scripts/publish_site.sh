@@ -7,4 +7,4 @@ cp -r "$site"/. "$tmp"/ && touch "$tmp/.nojekyll"
 git -C "$tmp" init -q -b gh-pages && git -C "$tmp" add -A && git -C "$tmp" -c user.name="$(git config user.name)" -c user.email="$(git config user.email)" commit -q -m "Publish site $(date +%Y-%m-%d_%H:%M)"
 git -C "$tmp" push -f "$PUBLIC" gh-pages:gh-pages
 rm -rf "$tmp"
-echo "Published. Enable once: GitHub repo Settings > Pages > Deploy from a branch > gh-pages / root. URL: https://imperorrp.github.io/brodie-starter-brodiegroove/"
+echo "Published. Enable once: GitHub repo Settings > Pages > Deploy from a branch > gh-pages / root. URL: https://brodiegroove.vercel.app/ (Vercel; the gh-pages branch is the fallback)"

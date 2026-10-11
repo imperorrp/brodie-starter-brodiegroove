@@ -113,7 +113,7 @@ inside a booked slot (the line is shared, one team at a time):
 Do not run `chert doctor --agent ...` while `chert dev` is up: the test room it creates and deletes can crash the worker's
 LiveKit library on Windows (the loop restarts it, but a call in that moment would be declined). Run the agent test before
 `chert dev`, or not at all once the warm room shows up in Terminal A.
-Then FaceTime video-call (310) 279-2297 from a phone; Terminal A prints `bound to 'chert-bridge-...' 1280x720` when the call
+Then FaceTime video-call the line's address (on the assignment card) from a phone; Terminal A prints `bound to 'chert-bridge-...' 1280x720` when the call
 lands. Hang up, Ctrl-C Terminal B and wait for "Stopped" to release the line. Signed in already (`chert whoami`); to sign in
 again: `.\team\scripts\chert.ps1 login --device` and enter the code at https://facetime.trychert.com/cli. With the worker on
 the dispatch name, the Chrome page's automatic dispatch does not pick it up: `.\team\scripts\chrome.ps1 -Restart` swaps back.
