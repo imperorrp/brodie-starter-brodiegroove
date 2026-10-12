@@ -33,6 +33,7 @@ class PhraseEngine:
         self.key = key; self.pi = phrase_index; self.tempo = float(tempo); self.show_repeats = int(show_repeats)
         self.countin_beats = int(countin_beats); self.rtt_s = float(rtt_s); self.extra_beats = int(extra_beats)
         self.on_event_cb = on_event; self.skip_show = bool(skip_show or freestyle); self.mirror_live = bool(mirror_live)
+        self.mask_hook = None                                                    # optional mask -> mask (live.py: DANCE_DEPTH_GATE)
         self.freestyle = bool(freestyle); self.live_skel = []                    # (t_phrase, (33,2) normalised skeleton) during the attempt
         self.live_3d = []                                                        # (t_phrase, body_frame_signals) during the attempt (depth / facing)
         self.focus = focus                                                       # 'arms': score the arm channels only (the simplified breakdown)
@@ -95,6 +96,9 @@ class PhraseEngine:
         self.last_lm = np.asarray(lm_img, np.float32)
         if self.state == 'attempt':
             f = features_from_landmarks(lm_img, lm_world); m = visibility_mask(lm_img)
+            if self.mask_hook is not None:                       # e.g. live.py's depth gate: joints the camera can't judge this frame
+                try: m = self.mask_hook(m)
+                except Exception: pass
             e = hip_energy(self.prev_lm, lm_img, (t - self.prev_t) if self.prev_t is not None else 0.0)
             from .features import skeleton2d_normalized, body_frame_signals
             self.live_skel.append((self.attempt_t(t), skeleton2d_normalized(lm_img)))

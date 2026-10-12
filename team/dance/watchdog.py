@@ -9,7 +9,7 @@ Also: END_AFTER_S with nobody in view and nothing said ends the call (a forgotte
 silence statistics for the per-call metrics (longest silence, silences over 20 s).
 """
 
-LIMITS = dict(CHOOSE=14.0, EXPLORE=25.0, OFFER=25.0, CONFIRM=30.0, REVIEW=22.0, PREPARE=30.0)
+LIMITS = dict(CHOOSE=25.0, EXPLORE=25.0, OFFER=25.0, CONFIRM=30.0, REVIEW=22.0, PREPARE=30.0)
 MAX_NUDGES = 3
 MAX_GAP_S = 60.0
 END_AFTER_S = 300.0

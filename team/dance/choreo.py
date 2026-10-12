@@ -32,7 +32,7 @@ STYLE_TITLES = dict(hiphop='Hip-Hop', pop='Pop Choreo', house='House', waack='Wa
                     fitness='Dance Cardio', daily='Daily Challenge')
 LEVEL_TITLES = dict(beginner='Starter', intermediate='Level Up', advanced='Pro')
 LEVEL_TEMPO = dict(beginner=0.8, intermediate=0.95, advanced=1.05)
-LEVEL_PHRASES = dict(beginner=3, intermediate=3, advanced=4)
+LEVEL_PHRASES = dict(beginner=2, intermediate=3, advanced=4)       # beginners: two steps (the 3-4 s breaks between moves add time)
 LEVEL_INDEX = dict(beginner=1, intermediate=2, advanced=3)
 DAILY_ROTATION = ('hiphop', 'pop', 'house', 'fitness', 'waack', 'jazz', 'krump')    # Monday first
 # live.py style codes -> pool names

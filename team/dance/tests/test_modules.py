@@ -52,7 +52,7 @@ def test_achievements_once():
 # ---- choreography ----
 def test_choreo_deterministic_and_named():
     a = choreo.generate('hiphop', 'beginner', seed=42); b = choreo.generate('hiphop', 'beginner', seed=42)
-    assert a['name'] == 'gen_hiphop_beginner_42' and a['features'] == b['features'] and len(a['phrases']) == 3
+    assert a['name'] == 'gen_hiphop_beginner_42' and a['features'] == b['features'] and len(a['phrases']) == choreo.LEVEL_PHRASES['beginner']
     c = choreo.from_name(a['name']); assert c['features'] == a['features'] and c['title'] == a['title']
     assert len({(m['src'], m['phrase']) for m in a['moves']}) == len(a['moves'])
 
@@ -60,7 +60,7 @@ def test_choreo_deterministic_and_named():
 def test_choreo_beginner_length_and_selfscore():
     k = choreo.generate('pop', 'beginner', seed=7)
     secs = choreo.routine_seconds(k, choreo.LEVEL_TEMPO['beginner'])
-    assert 15.0 <= secs <= 20.0, secs
+    assert 9.0 <= secs <= 20.0, secs                                       # two beginner steps (2026-10-11: was three)
     F, M, E, _ = phrase_slice(k, 1); pb = k['per_beat']
     Fl = np.concatenate([F, np.repeat(F[-1:], pb, 0)]); Ml = np.concatenate([M, np.repeat(M[-1:], pb, 0)]); El = np.concatenate([E, np.repeat(E[-1:], pb)])
     assert score_phrase(Fl, Ml, El, F, M, E, pb)['score'] >= 95

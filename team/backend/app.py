@@ -116,6 +116,20 @@ def dance_get_result(code: str):
     return r or {'error': 'no such code'}
 
 
+@app.post('/dance/ghost/{code}')
+async def dance_save_ghost(code: str, request: Request):
+    """A battle winner's dance as body points (they said yes to saving it): {token, src_key, bpm, per_beat, data, total, score100}.
+    The token is the one /dance/result returned to the winner's call; the shape is validated; an existing ghost is never replaced."""
+    b = await request.json()
+    return db.save_ghost(code, b.get('token'), b.get('src_key'), b.get('bpm', 100), b.get('per_beat', 4), b.get('data') or [], b.get('total', 0),
+                         b.get('score100', 0), b.get('difficulty'))
+
+
+@app.get('/dance/ghost/{code}')
+def dance_get_ghost(code: str):
+    return db.get_ghost(code) or {'error': 'no such ghost'}
+
+
 @app.get('/dance/leaderboard')
 def dance_leaderboard(key: str = None, limit: int = 20, mode: str = None, since: float = None):
     return db.leaderboard(key, limit, mode=mode, since=since)

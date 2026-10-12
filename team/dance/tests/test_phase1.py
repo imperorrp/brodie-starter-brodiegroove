@@ -105,3 +105,25 @@ def test_activity_resets_silence():
         clock['t'] = i * 0.5
         if i % 10 == 0: wd.activity(clock['t'])
         assert wd.check('OFFER', clock['t']) is None
+
+
+def test_friend_code_loads_the_saved_ghost(tmp_path):
+    import asyncio
+    from team.dance import ghost
+    from team.dance.tests.test_modules2 import _Eng
+    s, clock, log = _session()
+    db = s.backend.db; db.DB_PATH = str(tmp_path / 't.db'); db.init()
+    won = db.post_result(dict(name='Maya', key=s.key['name'], mode='battle', total=250.0, rounds=[]))
+    lost = db.post_result(dict(name='Lou', key=s.key['name'], mode='battle', total=120.0, rounds=[], issue_code=False))
+    assert won['code'] and lost['code'] is None                                       # only a win gets a code
+    r = ghost.live_to_arrays(_Eng())
+    assert not db.save_ghost(won['code'], 'wrong-token', s.key['name'], 100.0, 4, ghost.pack([r, r]), 250.0, 83.3)['ok']   # only the winner's call
+    assert not db.save_ghost(won['code'], won['ghost_token'], s.key['name'], 100.0, 4, [{'F': [[1e9]]}], 250.0, 83.3)['ok']  # malformed
+    assert db.save_ghost(won['code'], won['ghost_token'], s.key['name'], 100.0, 4, ghost.pack([r, r]), 250.0, 83.3)['ok']
+    assert not db.save_ghost(won['code'], won['ghost_token'], s.key['name'], 100.0, 4, ghost.pack([r, r]), 250.0, 83.3)['ok']  # never overwritten
+    assert 'name' not in db.get_ghost(won['code'])
+    assert any(k.get('has_ghost') for k in db.resolve_code(won['code'])['kinds'])
+    asyncio.run(s.load_challenge(won['code']))
+    assert s.queued_key['name'] == f"ghost_{won['code']}" and s.challenge.get('ghost') and "Maya's ghost" == s.queued_key['title']
+    db.delete_user('Maya')
+    assert db.get_ghost(won['code']) is None                                           # "forget me" deletes the ghost too

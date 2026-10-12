@@ -800,6 +800,27 @@ def draw_mode_cards(img, size, menu=None, t=0.0):
     return img
 
 
+def draw_break(img, size, brk, t=0.0):
+    """The break between moves (pacing.py): NEXT MOVE / BACK TO START, a ring that empties over the break with the seconds left,
+    and the first pose of what comes next as a cyan ghost, so the caller can get into position."""
+    cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
+    dur = max(0.1, float(brk.get('dur') or 3.0)); t0 = brk.get('t0'); left = max(0.0, dur - (t - (t if t0 is None else float(t0))))
+    cx = cw // 2; cy = int(sy + (sb - sy) * 0.42)
+    pv = brk.get('preview')
+    if pv is not None:
+        g = np.asarray(pv, np.float32); gx0, gy0 = g.min(axis=0); gx1, gy1 = g.max(axis=0)
+        box_h = (sb - sy) * 0.42; sc = min(box_h / max(gy1 - gy0, 2.4), (sx1 - sx) * 0.5 / max(gx1 - gx0, 0.6))
+        anchor = np.array([cx - (gx0 + gx1) / 2 * sc, cy - (gy0 + gy1) / 2 * sc], np.float32)
+        draw_figure(img, anchor + g * sc, None, color=CYAN, width=max(3, int(sc * 0.06)), glow=0.9, alpha=0.85)
+    r = int(46 * s0); ring_c = (cx, int(sb - 120 * s0))
+    cv2.circle(img, ring_c, r, (70, 66, 66), max(3, int(4 * s0)), cv2.LINE_AA)
+    cv2.ellipse(img, ring_c, (r, r), -90, 0, int(360 * left / dur), VOLT, max(4, int(6 * s0)), cv2.LINE_AA)
+    tx.put_text(img, str(int(math.ceil(left)) if left > 0 else 0), ring_c, int(40 * s0), PAPER, font='display', anchor='mm')
+    pill_c(img, str(brk.get('label') or 'NEXT MOVE'), cx, int(sy + 40 * s0), int(24 * s0), INK, VOLT)
+    if pv is not None: tx.put_text(img, 'GET INTO THIS POSE', (cx, int(ring_c[1] - r - 20 * s0)), int(13 * s0), MUTE, font='grotesk', anchor='ms')
+    return img
+
+
 def draw_compare(img, size, cmp, t=0.0):
     """Telephone's "watch it change": the last dancer's move and yours, side by side, looping on the beat."""
     cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
@@ -1275,7 +1296,7 @@ def draw_recap(img, recap, size):
 
 def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, best=None, recap=None, caption=None, footer=None, fxq=None, t=0.0,
                  gesture=None, paused=False, safety=False, players=None, hints=False, setup=None, speaking=False, state=None, avatar_state='idle',
-                 countdown=None, menu=False, compare=None):
+                 countdown=None, menu=False, compare=None, brk=None):
     """Chat, offer, setup and between-phrase view. In chat Brodie (kit avatar) is big at the bottom-left with his words beside him;
     in setup he moves to the top-left and the setup guide takes over; overlays on top. Everything stays inside the FaceTime safe area."""
     sh, sw = frame_bgr.shape[:2]; size = size or canvas_size(sw, sh)
@@ -1306,6 +1327,7 @@ def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, be
         elif recap: draw_recap(img, recap, size)
         if caption and not in_setup and not recap: draw_caption(img, caption, size, y_bottom=y1 - int(4 * s0))
     if compare is not None: draw_compare(img, size, compare, t)
+    if brk is not None: draw_break(img, size, brk, t)
     if countdown is not None:
         tx.put_text(img, str(countdown), (cw // 2, int(ch * 0.42)), int(220 * s0), VOLT, font='display', anchor='ms', stroke=8, stroke_color=PINK)
         pill_c(img, 'FINISH POSE!', cw // 2, int(ch * 0.42) + int(80 * s0), int(34 * s0), INK, VOLT)

@@ -225,7 +225,7 @@ def test_engine_demo_abort_focus_and_halves():
     d = PhraseEngine(key, show_repeats=1, demo_only=True); d.start(0.0); d.tick(d.show_s + 0.05)
     assert d.state == 'done' and d.result is None
     k2, hp = choreo.with_half(key, 1, 1)
-    assert k2['phrases'][hp]['beats'] == 4 and k2['phrases'][hp]['start_beat'] == key['phrases'][1]['start_beat'] + 4 and len(key['phrases']) == 3
+    assert k2['phrases'][hp]['beats'] == 4 and k2['phrases'][hp]['start_beat'] == key['phrases'][1]['start_beat'] + 4 and len(key['phrases']) == choreo.LEVEL_PHRASES['beginner']
 
 
 def test_buttons_are_state_gated():

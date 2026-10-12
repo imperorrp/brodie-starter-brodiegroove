@@ -98,7 +98,7 @@ def scenarios(clip, codes=None):
                                                        '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='90'),
              checks=['completed', 'menu_twice', 'offered_battle']),
         dict(name='menu_pick_battle', args=real + ['--say', '3:ghost battle', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready'],
-             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='260'), checks=['completed', 'battle_three_rounds', 'code_posted', 'speed_round', 'back_to_menu']),
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='260', DANCE_WIN_TOTAL='1'), checks=['completed', 'battle_three_rounds', 'code_posted', 'speed_round', 'back_to_menu']),
         dict(name='menu_pick_daily', args=real + ['--say', '3:the daily', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready',
                                                   '--answer', 'gotit:got it', '--answer', 'choice:next'],
              env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='520'), checks=['completed', 'daily_shot_posted']),
@@ -136,7 +136,11 @@ def scenarios(clip, codes=None):
                                                 '--say', "30:I can't step back any further", '--say', '44:yes', '--say', '52:ready'],
              env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='300'), checks=['completed', 'upper_body_used']),
         dict(name='desk_tracking', args=base + ['--mode', 'battle', '--crop-bottom', '0.45'], env=FAST, checks=['completed', 'tracked']),
-        dict(name='battle', args=base + ['--mode', 'battle', '--name', 'Dev'], env=FAST, checks=['completed', 'battle_three_rounds', 'code_posted', 'award']),
+        dict(name='battle', args=base + ['--mode', 'battle', '--name', 'Dev'], env=dict(FAST, DANCE_WIN_TOTAL='1'), checks=['completed', 'battle_three_rounds', 'code_posted', 'award']),
+        dict(name='battle_lost_no_code', args=base + ['--mode', 'battle', '--name', 'Lou'], env=dict(FAST, DANCE_WIN_TOTAL='299'), checks=['completed', 'battle_three_rounds', 'no_code']),
+        dict(name='battle_ghost_saved', args=real + ['--say', '3:ghost battle', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready',
+                                                     '--answer', 'ghostsave:yes'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='300', DANCE_WIN_TOTAL='1'),
+             checks=['completed', 'code_posted', 'ghost_saved']),
         dict(name='safety', args=base + ['--mode', 'learn', '--say', '18:ow my knee hurts'], env=FAST, checks=['completed', 'safety_stop']),
         dict(name='pause_resume', args=base + ['--mode', 'battle', '--gesture', '16:pause:2', '--gesture', '24:ready:2'], env=FAST,
              checks=['completed', 'paused_resumed']),
@@ -188,6 +192,8 @@ def check(res, name):
     if name == 'squad_rounds': return any(r.get('squad') and len((r['squad'].get('ranking') or [])) >= 2 for r in d.get('rounds', []))
     if name == 'daily_key': return str(d.get('key', '')).startswith('gen_daily_')
     if name == 'no_offer': return not any(r['type'] == 'offer' and r.get('source') != 'brodie' for r in rows)    # Brodie's own suggestions are fine
+    if name == 'no_code': return any(e.get('event') == 'result_posted' for e in d.get('log', [])) and not any(e.get('event') == 'result_posted' and e.get('code') for e in d.get('log', []))
+    if name == 'ghost_saved': return any(r['type'] == 'ghost_saved' and r.get('ok') for r in rows)
     if name == 'no_auto_offer': return not any(r['type'] == 'offer' and r.get('source') == 'brodie' for r in rows)
     if name == 'card_cycle': return 'card_cycle' in types
     if name == 'card_cycle_noisy': return any(r['type'] == 'card_cycle' and r.get('noisy') for r in rows)

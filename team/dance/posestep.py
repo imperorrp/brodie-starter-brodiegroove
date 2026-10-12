@@ -16,7 +16,8 @@ import numpy as np
 from .features import features_from_landmarks, visibility_mask, GROUPS
 from .reference import phrase_slice
 
-HOLD_S = float(os.environ.get('DANCE_POSE_HOLD_S', '3.5') or 3.5)
+from . import pacing
+HOLD_S = pacing.POSE_HOLD_S                         # DANCE_POSE_HOLD_S (3.5 s)
 
 
 def _smooth(u):
@@ -24,10 +25,13 @@ def _smooth(u):
 
 
 class PoseStepEngine:
-    def __init__(self, key, phrase_index=0, mode='watch', hold_s=None, ease_s=0.6, match_deg=25.0, match_hold_s=0.5, max_hold_s=4.0,
-                 on_event=None, focus=None):
+    def __init__(self, key, phrase_index=0, mode='watch', hold_s=None, ease_s=None, match_deg=25.0, match_hold_s=0.5, max_hold_s=4.0,
+                 on_event=None, focus=None, busy=None):
         self.key = key; self.pi = phrase_index; self.mode = mode if mode in ('watch', 'freeze') else 'watch'
-        self.hold_s = float(hold_s if hold_s is not None else HOLD_S); self.ease_s = float(min(ease_s, self.hold_s * 0.4))
+        self.hold_s = float(hold_s if hold_s is not None else HOLD_S)
+        self.ease_s = float(min(pacing.POSE_EASE_S if ease_s is None else ease_s, self.hold_s * 0.4))
+        self.busy = busy                    # () -> True while this count's line is still being said: the pose waits for it (capped)
+        self.rest_until = None              # freeze: a matched pose rests a moment before the next one
         self.match_deg = float(match_deg); self.match_hold_s = float(match_hold_s); self.max_hold_s = float(max(max_hold_s, self.hold_s))
         self.on_event_cb = on_event; self.focus = focus; self.step = None
         self.pb = int(key['per_beat']); self.kF, self.kM, self.kE, self.kS = phrase_slice(key, phrase_index)
@@ -72,7 +76,7 @@ class PoseStepEngine:
     # ---- input ----
     def on_frame(self, t, lm_img, lm_world=None):
         self.last_t = t
-        if self.mode != 'freeze' or self.state != 'show' or lm_img is None: return
+        if self.mode != 'freeze' or self.state != 'show' or lm_img is None or self.rest_until is not None: return
         f = features_from_landmarks(lm_img, lm_world); m = visibility_mask(lm_img)
         i = self.idx[self.cur]; kf = self.kF[i]; both = np.asarray(m, bool) & np.asarray(self.kM[i], bool)
         if self.focus == 'arms':
@@ -84,7 +88,8 @@ class PoseStepEngine:
         self.live_channel_err[b] = d
         if err < self.match_deg:
             if self.match_since is None: self.match_since = t
-            if t - self.match_since >= self.match_hold_s: self.verdicts_[b] = 'green'; self._advance(t, 'matched')
+            if t - self.match_since >= self.match_hold_s and self.rest_until is None:
+                self.verdicts_[b] = 'green'; self.rest_until = t + pacing.FREEZE_MATCH_REST_S; self.emit('pose_matched', count=b)
         else:
             self.match_since = None
             if t - self.t_cur > 1.5 and t - self.last_hint_t > 2.5:             # a hint for the furthest-off limb, depth first
@@ -108,8 +113,16 @@ class PoseStepEngine:
     def tick(self, t):
         self.last_t = t
         if self.state != 'show' or self.aborted: return
+        if self.rest_until is not None:
+            if t >= self.rest_until: self.rest_until = None; self._advance(t, 'matched')
+            return
         limit = self.hold_s if self.mode == 'watch' else self.max_hold_s
-        if t - self.t_cur >= limit: self._advance(t, 'held' if self.mode == 'watch' else 'timeout')
+        if t - self.t_cur >= limit:
+            talking = False
+            if self.busy is not None and t - self.t_cur < limit + pacing.POSE_SPEECH_EXTRA_S:
+                try: talking = bool(self.busy())
+                except Exception: talking = False
+            if not talking: self._advance(t, 'held' if self.mode == 'watch' else 'timeout')
 
     # ---- output ----
     def ghost_sample(self, t):

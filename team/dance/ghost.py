@@ -41,6 +41,15 @@ def ghost_key(code, owner, rounds, bpm, per_beat=4):
     return key
 
 
+def valid(data, bpm, per_beat):
+    """The backend's shape and size check, run again before a fetched ghost is unpacked and drawn (team/backend/db.valid_ghost)."""
+    import importlib.util, os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', 'db.py')
+    spec = importlib.util.spec_from_file_location('team_db_validate', path)
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    return m.valid_ghost(data, bpm, per_beat)
+
+
 def pack(rounds):
     return [dict(F=np.round(r['F'], 1).tolist(), M=np.asarray(r['M'], bool).astype(int).tolist(), E=np.round(r['E'], 3).tolist(),
                  S=np.round(r['S'], 3).tolist()) for r in rounds]

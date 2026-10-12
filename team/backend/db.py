@@ -24,6 +24,11 @@ def init():
         c.execute('CREATE TABLE IF NOT EXISTS dance_profiles (name_key TEXT PRIMARY KEY, display_name TEXT, xp INTEGER, level INTEGER, streak INTEGER, '
                   'last_day TEXT, styles TEXT, achievements TEXT, prefs TEXT, created REAL, updated REAL)')
         c.execute('CREATE TABLE IF NOT EXISTS dance_shares (id INTEGER PRIMARY KEY, code TEXT, kind TEXT, t REAL)')
+        # a battle winner's dance as body points (never video), only with their yes: friends with the code battle it (30 days)
+        c.execute('CREATE TABLE IF NOT EXISTS dance_ghosts (code TEXT PRIMARY KEY, name TEXT, src_key TEXT, bpm REAL, per_beat INTEGER, '
+                  'data TEXT, total REAL, score100 REAL, difficulty TEXT, created REAL)')
+        # the one-time token that lets the caller who earned a code save their ghost under it (returned only to them by post_result)
+        c.execute('CREATE TABLE IF NOT EXISTS dance_ghost_tokens (code TEXT PRIMARY KEY, token TEXT, created REAL)')
         cols = {r[1] for r in c.execute('PRAGMA table_info(dance_results)').fetchall()}
         if 'score100' not in cols: c.execute('ALTER TABLE dance_results ADD COLUMN score100 REAL')
         if 'challenge' not in cols: c.execute('ALTER TABLE dance_results ADD COLUMN challenge TEXT')
@@ -50,7 +55,8 @@ def resolve_code(code):
     'telephone' with the number of links, 'class' with the teacher). Old codes made before codes were unique can match twice."""
     code = str(code); kinds = []
     r = get_result(code)
-    if r: kinds.append(dict(kind='battle', name=r.get('name'), score100=r.get('score100') if r.get('score100') is not None else r.get('total'), key=r.get('key'), mode=r.get('mode')))
+    if r: kinds.append(dict(kind='battle', name=r.get('name'), score100=r.get('score100') if r.get('score100') is not None else r.get('total'), key=r.get('key'), mode=r.get('mode'),
+                            has_ghost=get_ghost(code, with_data=False) is not None))
     ch = get_chain(code)
     if ch: kinds.append(dict(kind='telephone', links=len(ch.get('links') or []), key=ch.get('key')))
     cl = get_class(code, with_key=False)
@@ -58,15 +64,16 @@ def resolve_code(code):
     return dict(code=code, kinds=kinds)
 
 
-def add_result(name, key, mode, total, rounds, score100=None, challenge=None):
+def add_result(name, key, mode, total, rounds, score100=None, challenge=None, issue_code=True):
     """score100: the result on a 0-100 scale for like-for-like duels across modes (learn: best phrase, battle: total / 3).
-    challenge: the code this result challenged (it then appears on that code's crew board)."""
+    challenge: the code this result challenged (it then appears on that code's crew board). issue_code=False (a lost battle: the
+    site promises codes to winners) stores the result with no code (NULL; SQLite allows many) and returns None."""
     if score100 is None: score100 = float(total) / 3.0 if mode in ('battle', 'squad_battle') else float(total)
     with _lock, _conn() as c:
-        code = _new_code(c, 'dance_results')
+        code = _new_code(c, 'dance_results') if issue_code else None
         c.execute('INSERT INTO dance_results (code, name, key, mode, total, rounds, created, score100, challenge) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                   (code, name or 'anonymous', key, mode, float(total), json.dumps(rounds), _time.time(), float(score100), str(challenge) if challenge else None))
-        c.execute('INSERT INTO dance_shares (code, kind, t) VALUES (?, ?, ?)', (code, 'issued', _time.time()))
+        if code: c.execute('INSERT INTO dance_shares (code, kind, t) VALUES (?, ?, ?)', (code, 'issued', _time.time()))
         if challenge: c.execute('INSERT INTO dance_shares (code, kind, t) VALUES (?, ?, ?)', (str(challenge), 'challenge_complete', _time.time()))
     return code
 
@@ -312,6 +319,7 @@ def delete_user(name):
     if not key: return out
     with _lock, _conn() as c:
         out['profile'] = c.execute('DELETE FROM dance_profiles WHERE name_key = ?', (key,)).rowcount
+        out['ghosts'] = c.execute('DELETE FROM dance_ghosts WHERE lower(name) = ?', (key,)).rowcount
         out['results'] = c.execute('DELETE FROM dance_results WHERE lower(name) = ?', (key,)).rowcount
         for table, col, label in (('dance_chains', 'links', 'chains'), ('dance_classes', 'students', 'classes')):
             for r in c.execute(f'SELECT code, {col} FROM {table}').fetchall():
@@ -378,16 +386,80 @@ def post_result(b):
     on score100 and rank on that code's crew board. Shared by the HTTP API and the in-process backend."""
     ch = b.get('challenge'); opp = get_result(ch) if ch else None
     code = add_result(b.get('name'), b.get('key', ''), b.get('mode', 'learn'), float(b.get('total', 0)), b.get('rounds', []),
-                      score100=b.get('score100'), challenge=ch if opp is not None else None)
-    mine = get_result(code)
-    out = dict(code=code, total=float(b.get('total', 0)), score100=mine.get('score100'), name=b.get('name') or 'anonymous')
+                      score100=b.get('score100'), challenge=ch if opp is not None else None, issue_code=b.get('issue_code', True) is not False)
+    if code: s100 = get_result(code).get('score100')
+    else: s100 = b.get('score100') if b.get('score100') is not None else (float(b.get('total', 0)) / 3.0 if b.get('mode') in ('battle', 'squad_battle') else float(b.get('total', 0)))
+    out = dict(code=code, total=float(b.get('total', 0)), score100=s100, name=b.get('name') or 'anonymous')
+    if code and b.get('mode') == 'battle':                       # only this caller can attach a ghost to the code
+        import secrets
+        tok = secrets.token_urlsafe(16)
+        with _lock, _conn() as c: c.execute('INSERT OR REPLACE INTO dance_ghost_tokens (code, token, created) VALUES (?, ?, ?)', (code, tok, _time.time()))
+        out['ghost_token'] = tok
     if ch:
         if opp is not None:
             theirs = opp.get('score100') if opp.get('score100') is not None else opp['total']
             out['versus'] = dict(code=ch, name=opp['name'], total=opp['total'], score100=theirs, key=opp['key'])
             out['winner'] = (out['name'] if out['score100'] > theirs else opp['name'] if theirs > out['score100'] else 'tie')
-            board = crew_board(ch)
+            board = crew_board(ch) if code else None
             if board: out['board'] = dict(rank=next((e['rank'] for e in board['entries'] if e['code'] == code), None), n=board['n'], owner=board['owner'])
         else:
             out['versus'] = None
     return out
+
+
+# ---- ghosts: a battle winner's dance (body points only), for friends to battle ----
+GHOST_DAYS = 30
+
+
+GHOST_MAX_BYTES = 400_000
+
+
+def valid_ghost(data, bpm, per_beat):
+    """A ghost is 1-2 rounds of (n, 14) angles, (n, 14) visibility, (n,) energy and (n, 33, 2) skeleton, n = 16..64 samples (4 per
+    count), finite numbers, a sane tempo. Anything else is refused (it is loaded and drawn on someone else's call)."""
+    import math
+    try:
+        if int(per_beat) != 4 or not (40.0 <= float(bpm) <= 220.0): return False
+        if not isinstance(data, list) or not 1 <= len(data) <= 2: return False
+        n0 = None
+        for r in data:
+            F, M, E, S = r['F'], r['M'], r['E'], r['S']; n = len(F)
+            if not 16 <= n <= 64 or n % 4 or (n0 is not None and n != n0): return False
+            n0 = n
+            if len(M) != n or len(E) != n or len(S) != n: return False
+            if any(len(row) != 14 for row in F) or any(len(row) != 14 for row in M): return False
+            if any(len(p) != 33 or any(len(xy) != 2 for xy in p) for p in S): return False
+            for v in [x for row in F for x in row] + list(E) + [c for p in S for xy in p for c in xy]:
+                if not isinstance(v, (int, float)) or not math.isfinite(v) or abs(v) > 1e4: return False
+        return len(json.dumps(data)) <= GHOST_MAX_BYTES
+    except Exception:
+        return False
+
+
+def save_ghost(code, token, src_key, bpm, per_beat, data, total, score100, difficulty=None):
+    """Attach a battle winner's ghost to their code. Needs the code's one-time token (only the winner's call has it); never overwrites
+    an existing ghost; the name is the result's own. data: team.dance.ghost.pack(rounds), validated. Ghosts expire after GHOST_DAYS."""
+    code = str(code); now = _time.time()
+    if not valid_ghost(data, bpm, per_beat): return dict(ok=False, error='invalid ghost')
+    res = get_result(code)
+    if res is None: return dict(ok=False, error='no such code')
+    with _lock, _conn() as c:
+        row = c.execute('SELECT token FROM dance_ghost_tokens WHERE code = ?', (code,)).fetchone()
+        if row is None or not token or row['token'] != str(token): return dict(ok=False, error='not allowed')
+        c.execute('DELETE FROM dance_ghosts WHERE created < ?', (now - GHOST_DAYS * 86400,))
+        if c.execute('SELECT 1 FROM dance_ghosts WHERE code = ?', (code,)).fetchone(): return dict(ok=False, error='ghost already saved')
+        c.execute('INSERT INTO dance_ghosts (code, name, src_key, bpm, per_beat, data, total, score100, difficulty, created) '
+                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (code, res.get('name') or 'anonymous', src_key, float(bpm), int(per_beat), json.dumps(data),
+                                                            float(total), float(score100), difficulty, now))
+        c.execute('DELETE FROM dance_ghost_tokens WHERE code = ?', (code,))
+    return dict(ok=True, code=code)
+
+
+def get_ghost(code, with_data=True):
+    with _lock, _conn() as c:
+        r = c.execute('SELECT * FROM dance_ghosts WHERE code = ? AND created >= ?', (str(code), _time.time() - GHOST_DAYS * 86400)).fetchone()
+    if r is None: return None
+    d = dict(r); d.pop('name', None)                           # body points only: the name comes with the result, not the ghost
+    if with_data: d['data'] = json.loads(d['data'] or '[]')
+    else: d.pop('data', None)
+    return d
