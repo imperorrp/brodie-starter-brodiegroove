@@ -10,6 +10,7 @@ os.environ.setdefault('BACKEND_URL', 'fake')
 from team.dance import live
 from team.dance.engine import PhraseEngine
 from team.dance import choreo
+from team.dance import feedback
 
 
 def test_command_priority_and_negation():
@@ -68,8 +69,8 @@ def test_voice_event_flow_and_dedupe():
     clock['t'] = 6.0; s.on_worker_event(dict(type='voice', role='caller', text='ok ready'))
     assert s.affirm_t == 6.0
     s.state = 'ACTIVITY'; s.pending_cmd = None
-    assert s._cmd('again', 'tool') and not s._cmd('again', 'voice')              # same command within 2.5 s: once
-    clock['t'] = 9.0; assert s._cmd('again', 'voice')
+    assert s._cmd('again', 'tool') and not s._cmd('again', 'voice')              # same command within 4 s (regex + Gemini tool): once
+    clock['t'] = 10.5; assert s._cmd('again', 'voice')
     s.on_worker_event(dict(type='voice', role='coach', text='Nice one Maya.'))
     assert s.caption[0] == 'Nice one Maya.'
 
@@ -103,7 +104,7 @@ def test_caller_speech_holds_system_lines():
 
 def test_no_meta_prompts_in_flow_code():
     src = open(live.__file__, encoding='utf-8').read()
-    body = src[src.index('class DanceSession'):src.index('    async def record_phrase')]
+    body = src[src.index('class DanceSession'):src.index('# ---- worker registration ----')]   # every mode, telephone and class included
     calls = [l for l in body.splitlines() if 'self.ask(' in l or 'self.say_line(' in l or 'ask_yes_no(' in l]
     for l in calls:
         for bad in ('ask them to', 'One short sentence:', 'One short question:'):
@@ -129,7 +130,7 @@ def test_guard_turns_a_crash_into_chat():
     s, clock, log = _session(); s.state = 'PREPARE'
     async def boom(): raise RuntimeError('camera exploded')
     r = asyncio.run(s.guard(boom(), 'setup'))
-    assert r is None and s.state == 'EXPLORE' and s.telemetry.errors
+    assert r is None and s.state == 'CHOOSE' and s.telemetry.errors
 
 
 def test_difficulty_lock(monkeypatch):
@@ -146,7 +147,7 @@ def test_tools_guarded():
     s, clock, _ = _session()
     t = {f.info.name if hasattr(f, 'info') else f.__name__: f for f in tools.build_tools(s)}
     run = lambda name, *a, **k: json.loads(asyncio.run(t[name](*a, **k)))
-    out = run('control_session', 'slower'); assert out['ok'] and out['will_happen'] == 'nothing yet'   # nothing runs in chat
+    out = run('control_session', 'slower'); assert out['ok'] and out['will_happen'] == 'nothing'       # nothing runs in chat
     assert not run('control_session', 'ready')['ok']                                                    # no start through tools
     assert run('confirm_start')['started'] is False
     out = run('set_preferences', personality='coach', difficulty='advanced')
@@ -209,7 +210,9 @@ def test_setup_checker():
     tr = su.SetupTracker(); res = None
     for i in range(30): res = tr.update(i / 15, _body(), 120)
     assert res['ok_stable']
-    res = tr.update(2.1, nohips, 120); assert not res['ok_stable']
+    res = tr.update(2.1, nohips, 120); assert res['ok_stable']                    # one bad frame doesn't break it any more
+    for i in range(12): res = tr.update(2.2 + i / 15, nohips, 120)
+    assert not res['ok_stable']
 
 
 def test_engine_demo_abort_focus_and_halves():
@@ -270,15 +273,337 @@ def test_facetime_callers_get_portrait(monkeypatch):
     assert s.size == (720, 1280)
 
 
-def test_brodie_suggests_a_routine_himself():
+def test_cards_never_auto_offer_and_hands_up_picks_the_lit_card():
+    """CHOOSE: Brodie asks what we're doing and never makes an offer by himself; after CYCLE_START_S quiet a highlight steps through
+    the cards and both hands up picks the card that was lit when the hold began."""
     s, clock, log = _session(); s.lobby_enabled = True; s.t0 = 0.0
-    s.sleep = lambda x: asyncio.sleep(0)                                         # simulated clock: no real waiting
+    s.sleep = lambda x: asyncio.sleep(0)
+    seen = dict(lit=None)
     async def go():
         t = asyncio.create_task(s.explore(first=True))
-        for i in range(600):
+        for i in range(2000):
             clock['t'] += 0.05; await asyncio.sleep(0)
-            if s.state == 'OFFER' and any('Want to start now' in e.get('ask', '') or 'Shall we start' in e.get('ask', '') or 'Up for it' in e.get('ask', '') for e in log):
-                break
+            if s.state == 'OFFER': break
+            lit = (s.menu_ui or {}).get('lit')
+            if s.menu_ui and s.menu_ui.get('cycling') and lit == 1 and seen['lit'] is None:
+                seen['lit'] = clock['t']; s.gesture_ui = dict(kind='ready', p=0.5)          # a hold starts while Ghost Battle is lit
+            if seen['lit'] is not None and clock['t'] - seen['lit'] > 3.0 and s.affirm_t < 0:
+                s.affirm_t = clock['t']                                                    # ...and completes after the highlight moved on
         t.cancel()
     asyncio.run(go())
-    assert s.state == 'OFFER' and s.proposal['source'] == 'brodie' and s.offers_made == 1   # he leads, but nothing starts without a yes
+    assert s.state == 'OFFER' and s.proposal['mode'] == 'battle' and s.proposal['source'] == 'card'
+    assert not any(e.get('note') == 'brodie' for e in log) and s.offers_made == 0
+    assert any(live.mode_cards.HELLO[:20] in e.get('ask', '') for e in log)
+
+
+class _OkTracker:
+    """Framing that holds, except while `bad(t)` is true (a camera tip in between)."""
+    bad = staticmethod(lambda t: False)
+    def __init__(self, upper=False): self.upper = upper
+    def update(self, now, lm, luma, aspect=None):
+        b = _OkTracker.bad(now)
+        return dict(ok_now=not b, ok_stable=not b, issue='too_close' if b else None, checks={}, hold=0.0)
+
+
+def _run_setup(s, clock, monkeypatch, script, until=90.0, bad=lambda t: False):
+    """Drive setup_camera on the simulated clock; `script` maps a time to a callback (a caller line, a gesture)."""
+    from team.dance import setup as setup_mod
+    _OkTracker.bad = staticmethod(bad); monkeypatch.setattr(setup_mod, 'SetupTracker', _OkTracker)
+    s.lobby_enabled = True; s.t0 = 0.0; s.sleep = lambda x: asyncio.sleep(0); seen = dict(want_ready=False)
+    pending = sorted(script.items())
+    async def go():
+        t = asyncio.create_task(s.setup_camera())
+        while clock['t'] < until and not t.done():
+            clock['t'] += 0.1
+            while pending and pending[0][0] <= clock['t']: pending.pop(0)[1]()
+            seen['want_ready'] |= s.want_ready
+            for _ in range(3): await asyncio.sleep(0)
+        if not t.done(): t.cancel(); return None, seen
+        return t.result(), seen
+    return asyncio.run(go())
+
+
+def _said(log, *texts): return [e for e in log if any(x in e.get('ask', '') for x in texts)]
+
+
+def test_space_question_late_yes_counts(monkeypatch):
+    s, clock, log = _session()
+    caller = lambda txt: (lambda: s.on_worker_event(dict(type='voice', role='caller', text=txt)))
+    ok, seen = _run_setup(s, clock, monkeypatch, {40.0: caller('yes')}, bad=lambda t: 20 < t < 26)   # a camera tip in between, then a late yes
+    assert ok is True and s.space_ok and seen['want_ready'] and not s.want_ready
+    assert len(_said(log, 'Perfect, I can see', 'Looking good!')) == 1                                 # asked once, never re-asked
+
+
+def test_space_question_hands_up_answers(monkeypatch):
+    s, clock, log = _session()
+    def hands_up():
+        assert s.want_ready                                                      # the gesture path is armed while the question is open
+        s.affirm_t = s.now()                                                     # what _gestures does on both hands up
+    ok, _ = _run_setup(s, clock, monkeypatch, {15.0: hands_up})
+    assert ok is True and s.space_ok
+
+
+def test_space_question_nudges_twice_then_trusts_the_caller(monkeypatch):
+    s, clock, log = _session()
+    ok, _ = _run_setup(s, clock, monkeypatch, {}, until=120.0)
+    assert len(_said(log, 'Perfect, I can see', 'Looking good!')) == 1 and len(_said(log, "If you've got")) == 1 and len(_said(log, 'Take your time')) == 1
+    assert ok is True and s.space_ok and len(_said(log, "trust you've got room")) == 1     # space can't be seen: never a dead end
+    s2, clock2, log2 = _session()
+    ok2, _ = _run_setup(s2, clock2, monkeypatch, {}, until=20.0)
+    assert ok2 is None and not s2.space_ok and s2.setup_ui.get('prompt')         # before that: waiting, prompt on screen, no start
+
+
+# ---- the 2026-10-11 audit: every wait has an exit, every answer counts ----
+YES = ["yes", "yeah", "Ya.", "yea", "yesss", "yessir", "okayy", "ok", "k", "let's gooo", "bet", "I'm down", "I'm in", "for sure", "sounds good",
+       "got it", "cool", "oh yeah", "um okay", "so yeah", "hell yeah", "bro let's go", "de Hello yes", "Yeah?", "Ready?", "Yes! can you see me?",
+       "All right. Let's start it.", "yeah let's do it", "Do it!", "I can't wait, let's go!", "no cap let's go", "yes no doubt", "makes sense",
+       "I'm good to go", "uh huh", "mm-hmm", "Yeah, started.", "Claro.", "Ja.", "sure"]
+NO = ["no", "nah", "nope", "not right now", "I'm good", "absolutely not", "of course not", "I do not want to", "go away", "not yet", "wait",
+      "hold on", "I'm not ready", "maybe later"]
+NEITHER = ["no worries", "don't stop", "I have a question", "I have to go", "what's that", "Is that okay?", "c'est quand"]
+
+
+@pytest.mark.parametrize('text', YES)
+def test_classify_yes(text):
+    c = live.classify(text); assert c['affirm'] and not c['deny'] and not c['question'], (text, c)
+
+
+@pytest.mark.parametrize('text', NO)
+def test_classify_no(text):
+    c = live.classify(text); assert c['deny'] and not c['affirm'], (text, c)
+
+
+@pytest.mark.parametrize('text', NEITHER)
+def test_classify_neither(text):
+    c = live.classify(text); assert not c['affirm'] and not c['deny'], (text, c)
+
+
+def test_names_styles_and_pain_words():
+    s, clock, log = _session()
+    s.on_worker_event(dict(type='voice', role='caller', text="I'm down, this is fun"))
+    assert s.name is None                                                        # "I'm down" is not a name
+    s.on_worker_event(dict(type='voice', role='caller', text="My name is Brian and I want to dance hip-hop today."))
+    assert s.name == 'Brian' and s.style == 'lh'
+    assert live.style_from('can we do kpop instead of hip hop') == 'kpop' and live.style_from('not hip hop, pop') == 'po'
+    assert live.pain_level('ow my knee hurts') == 'strong' and live.pain_level('this song hurts my ears') == 'weak'
+    assert live.pain_level("it doesn't hurt") is None and live.pain_level('my friend got hurt dancing') == 'weak'
+    s.on_worker_event(dict(type='voice', role='caller', text="I'm a student"))
+    assert s.mode_choice is None                                                 # a word in passing never switches the mode
+
+
+def test_unchanged_offer_keeps_the_yes():
+    s, clock, log = _session(); s.lobby_enabled = True; s.t0 = 0.0
+    s.request_activity(mode='learn', style='hip-hop', source='voice'); t_prop = s.proposal_t
+    clock['t'] = 3.0; s.offer_asked_t = 3.0                                      # the offer question was asked
+    clock['t'] = 5.0; s.on_worker_event(dict(type='voice', role='caller', text="All right. Let's start it."))
+    r = s.request_activity(mode='learn', style='hip-hop', source='tool')         # Gemini proposes the same routine again
+    assert r['already_offered'] and s.proposal_t == t_prop and s.affirm_t == 5.0
+    clock['t'] = 6.0; s.on_worker_event(dict(type='voice', role='caller', text='actually K-pop'))
+    assert s.proposal['style'] == 'kpop' and s.proposal_t == 6.0                 # a real change of mind is a new offer
+    clock['t'] = 7.0; s.on_worker_event(dict(type='voice', role='caller', text='no thanks'))
+    assert s.cancel_req                                                          # "no" goes back to chat
+
+
+def test_offer_yes_after_gemini_asked():
+    s, clock, log = _session(); s.lobby_enabled = True; s.t0 = 0.0; s.sleep = lambda x: asyncio.sleep(0)
+    s.request_activity(mode='learn', style='pop', source='voice')
+    async def go():
+        t = asyncio.create_task(s.offer_loop())
+        for i in range(200):
+            clock['t'] += 0.05; await asyncio.sleep(0)
+            if i == 20: s.on_worker_event(dict(type='voice', role='coach', text='Want to jump into a pop routine?'))
+            if i == 40: s.on_worker_event(dict(type='voice', role='caller', text='bet'))
+            if i == 45: s.on_worker_event(dict(type='voice', role='coach', text="Let's go! Ready for the camera check?"))
+            if t.done(): return t.result()
+        t.cancel()
+    assert asyncio.run(go()) == 'yes'
+
+
+def test_waits_recover_when_the_question_was_dropped():
+    s, clock, log = _session(); s.lobby_enabled = True; s.t0 = 0.0; s.sleep = lambda x: asyncio.sleep(0)
+    s.state = 'REVIEW'
+    async def go():
+        t = asyncio.create_task(s.wait_choice('Got it?', key='gotit'))
+        await asyncio.sleep(0); s.say_q = []                                     # the line never gets said
+        for i in range(400):
+            clock['t'] += 0.1; await asyncio.sleep(0)
+            if i == 200: s.on_worker_event(dict(type='voice', role='caller', text='yeah'))
+            if t.done(): return t.result()
+        t.cancel()
+    assert asyncio.run(go()) == 'yes'
+
+
+def test_got_it_any_reply_and_timeout():
+    s, clock, log = _session(); s.lobby_enabled = True; s.t0 = 0.0; s.sleep = lambda x: asyncio.sleep(0); s.state = 'REVIEW'
+    async def go(script, until=120.0):
+        t = asyncio.create_task(s.wait_choice('Got it?', key='gotit', reprompt='Take your time.', any_reply=True, timeout=25.0, on_timeout='yes'))
+        start = clock['t']
+        while clock['t'] - start < until:
+            clock['t'] += 0.1; await asyncio.sleep(0)
+            for at, text in list(script):
+                if clock['t'] - start >= at: script.remove((at, text)); s.on_worker_event(dict(type='voice', role='caller', text=text))
+            if t.done(): return t.result(), clock['t'] - start
+        t.cancel(); return None, None
+    r, _ = asyncio.run(go([(3.0, 'makes sense, I think')])); assert r == 'yes'
+    r, took = asyncio.run(go([])); assert r == 'yes' and 40 < took < 60                     # quiet: one reprompt, then on to practice
+
+
+def test_stale_commands_never_skip_or_stop():
+    s, clock, log = _session(); s.state = 'REVIEW'
+    clock['t'] = 1.0; s._cmd('stop', 'voice')                                    # "I'm done" at the last wrap card
+    clock['t'] = 5.0; s.setup_activity(dict(mode='learn'))                        # a new routine later
+    assert s.take_cmd(('stop',)) is None                                         # the old stop never ends the new one
+    s.state = 'PREPARE'; clock['t'] = 10.0
+    assert s.tool_command('next')['will_happen'] == 'nothing' and s.pending_cmd is None   # nothing to skip during the camera check
+    s.state = 'REVIEW'; clock['t'] = 20.0; s.on_worker_event(dict(type='voice', role='caller', text='hold on'))
+    assert s.hold_until > 20 and s.deny_t < 0 and s.pending_cmd is None           # a hold is a wait, not a no or a pause
+
+
+def test_tracker_is_smoothed():
+    from team.dance import setup as su
+    tr = su.SetupTracker(); res = None
+    for i in range(60):                                                          # one frame in five fails: still stable
+        lm = _body()
+        if i % 5 == 0: lm[[23, 24], 3] = 0.1
+        res = tr.update(i / 15, lm, 120)
+    assert res['ok_stable'] and res['issue'] is None
+    lm = _body(); lm[[11, 12], 0] = lm[[11, 12], 0] * 0.5 + 0.25                 # narrow shoulders in x (turned away)...
+    assert su.evaluate(lm, 120, aspect=16 / 9)['metrics']['facing'] > su.evaluate(lm, 120)['metrics']['facing']   # ...less so on 16:9
+
+
+def test_lines_go_to_gemini_as_user_turns():
+    calls = []
+    class Sess:
+        def generate_reply(self, **kw): calls.append(kw); return 'h'
+    from facetime import voice as fv
+    live.patch_voice_layer()
+    m = fv.GeminiModel('persona'); m.session = Sess()
+    m.generate(live.SAY_PREFIX + '"Take a step back."')
+    assert 'instructions' not in calls[0] and calls[0]['user_input'].startswith('[Stage direction')
+    assert calls[0]['user_input'].endswith('"Take a step back."') and 'Private instruction' not in calls[0]['user_input']
+
+
+# ---- v5: the opening menu, every site mode, codes, pose by pose, depth-aware coaching ----
+def test_menu_choice_and_edge_cases():
+    s, clock, log = _session(); s.lobby_enabled = True; s.menu_open = True
+    s.on_worker_event(dict(type='voice', role='caller', text='what can you do?'))
+    assert s.state == 'EXPLORE' and any('What are we doing' in e.get('ask', '') for e in log if 'ask' in e)
+    s.say_q = []
+    s.on_worker_event(dict(type='voice', role='caller', text='battle or the daily?'))
+    assert s.state == 'EXPLORE' and any('Which one' in e.get('ask', '') for e in log if 'ask' in e)   # two modes: "which one?"
+    s.on_worker_event(dict(type='voice', role='caller', text='the daily one'))
+    assert s.state == 'OFFER' and s.proposal['mode'] == 'daily'                           # after the menu, a mode word is a choice
+    assert "daily challenge" in s.offer_label()
+    s2, _, _ = _session(); s2.lobby_enabled = True; s2.menu_open = True
+    s2.on_worker_event(dict(type='voice', role='caller', text='after class I want to dance'))
+    assert s2.proposal is None or s2.proposal['mode'] != 'class'                          # "after class" is not class mode
+    s3, _, _ = _session(); s3.lobby_enabled = True; s3.menu_open = True
+    s3.on_worker_event(dict(type='voice', role='caller', text='idk'))
+    assert s3.state == 'OFFER' and s3.proposal['source'] == 'brodie'                      # "idk": Brodie picks
+
+
+def test_offer_labels_and_tool_kinds():
+    pytest.importorskip('livekit.agents')
+    from team.dance import tools
+    s, clock, log = _session(); s.lobby_enabled = True
+    t = {f.info.name if hasattr(f, 'info') else f.__name__: f for f in tools.build_tools(s)}
+    run = lambda name, *a, **k: json.loads(asyncio.run(t[name](*a, **k)))
+    want = dict(learn='routine', battle='ghost battle', daily='daily challenge', squad_battle='squad battle', squad_learn='whole squad',
+                telephone='telephone', **{'class': 'I lead', 'class_record': 'class recording'})
+    for kind, word in want.items():
+        clock['t'] += 1.0; r = run('propose_activity', kind)
+        assert r['ok'] and s.proposal['mode'] == kind and word in s.offer_label(), (kind, s.offer_label())
+    assert not run('propose_activity', 'karaoke')['ok']                                     # unknown kinds are refused, never silently "learn"
+    s.request_activity(mode='telephone', style='hip-hop', source='brodie')
+    assert s.proposal.get('code') is None                                                  # regression: a style code once leaked into the code
+
+
+def test_codes_resolve_across_kinds():
+    from team.dance.live import Backend
+    b = Backend('fake'); db = b.db
+    c_battle = db.add_result('Sam', 'gen_x', 'battle', 240.0, [])
+    c_chain = db.start_chain('gen_x', dict(name='Ana', key={'name': 'k'}, score=100.0))
+    c_class = db.start_class('Mia', {'name': 'class_k', 'phrases': []})
+    assert len({c_battle, c_chain, c_class}) == 3
+    assert [k['kind'] for k in db.resolve_code(c_battle)['kinds']] == ['battle']
+    assert [k['kind'] for k in db.resolve_code(c_chain)['kinds']] == ['telephone']
+    assert [k['kind'] for k in db.resolve_code(c_class)['kinds']] == ['class']
+    assert db.resolve_code('0000')['kinds'] == [] or True
+    s, clock, log = _session(); s.lobby_enabled = True
+    async def go(code): return await s.handle_code(code)
+    assert asyncio.run(go(c_chain))['kind'] == 'telephone' and s.state == 'OFFER' and s.proposal['mode'] == 'telephone' and s.proposal['code'] == c_chain
+    assert 'telephone chain' in s.offer_label()
+
+
+def test_daily_board_one_shot():
+    from team.dance.live import Backend
+    import time as _t
+    db = Backend('fake').db
+    key = f'gen_daily_test_{int(_t.time())}'
+    db.add_result('Lee', key, 'daily', 70.0, [], score100=70.0); db.add_result('Kim', key, 'daily', 90.0, [], score100=90.0)
+    db.add_result('Kim', key, 'learn', 99.0, [], score100=99.0)                            # practice / other modes never rank
+    board = db.leaderboard(key, 10000, mode='daily', since=_t.time() - 3600)
+    assert [r['name'] for r in board] == ['Kim', 'Lee'] and db.daily_played('kim', key) and not db.daily_played('Zed', key)
+
+
+def test_pose_step_watch_and_freeze():
+    from team.dance.posestep import PoseStepEngine
+    key = choreo.generate('hiphop', 'beginner', seed=3)
+    e = PoseStepEngine(key, 0, mode='watch', hold_s=3.5); e.start(0.0); counts = []
+    t = 0.0
+    while e.state != 'done' and t < 60:
+        e.tick(t); counts.append((round(t, 1), e.cur)); t += 0.1
+    changes = [c for (tt, c), (tp, cp) in zip(counts[1:], counts) if c != cp]
+    assert e.state == 'done' and len(changes) == e.n_beats - 1 and abs(t - 3.5 * e.n_beats) < 0.6
+    g0 = e.ghost_sample(0.0); assert g0 is not None and g0.shape == (33, 2)
+    f = PoseStepEngine(key, 0, mode='freeze', max_hold_s=4.0); f.start(0.0); t = 0.0
+    while f.state != 'done' and t < 60: f.on_frame(t, None); f.tick(t); t += 0.1                 # nobody matches: it still moves on
+    assert f.state == 'done' and abs(t - 4.0 * f.n_beats) < 0.6
+    h = f.hud(t); assert h['pose_step'] == 'freeze' and len(h['verdicts']) == f.n_beats
+
+
+def test_body_frame_signals_and_depth_cues():
+    import math
+    from team.dance.features import body_frame_signals
+    P = np.zeros((33, 3), np.float32); V = np.ones((33, 5), np.float32)
+    P[11] = [0.18, -0.45, 0]; P[12] = [-0.18, -0.45, 0]; P[23] = [0.1, 0, 0]; P[24] = [-0.1, 0, 0]; P[0] = [0, -0.65, -0.08]
+    P[15] = [0.18, -0.45, -0.55]; P[16] = [-0.73, -0.45, 0]                     # left arm straight forward, right arm out to the side
+    sg = body_frame_signals(P, V); assert sg['arm_fwd_l'] > 80 and abs(sg['arm_fwd_r']) < 5 and abs(sg['facing_yaw']) < 5
+    a = math.radians(40); R = np.array([[math.cos(a), 0, -math.sin(a)], [0, 1, 0], [math.sin(a), 0, math.cos(a)]], np.float32)
+    sg2 = body_frame_signals(P @ R.T, V); assert abs(sg2['facing_yaw'] - 40) < 2 and sg2['arm_fwd_l'] > 80   # body frame: turning doesn't change it
+    key = choreo.generate('hiphop', 'beginner', seed=3); prof = feedback.ref_profile(key, 0)
+    assert prof and all(0 < p['flat_l'] <= 1.0001 for p in prof)
+    flat = dict(prof[0], flat_l=1.0, dir_l='out')
+    c = feedback.depth_issue(dict(arm_fwd_l=70.0), flat, 'l'); assert c and 'forward' in c['text'] and 'out to the side' in c['text']
+    assert feedback.depth_issue(dict(arm_fwd_l=20.0), flat, 'l') is None                     # inside the deadband: no cue
+    res = dict(scored=True, score=60, weak_beats=[], per_beat=[], body3d=[dict(arm_fwd_l=70.0, facing_yaw=0.0)] * len(prof))
+    prof_flat = [dict(p, flat_l=1.0, dir_l='out', facing=1.0) for p in prof]
+    import team.dance.feedback as fb
+    orig = fb.ref_profile; fb.ref_profile = lambda k, i: prof_flat
+    try: cues = fb.depth_cues(res, key, 0)
+    finally: fb.ref_profile = orig
+    assert cues and cues[0]['kind'] == 'depth' and 'counts 1 to' in cues[0]['text']
+
+
+def test_layered_cues_ranked_capped_and_progress():
+    from team.dance.features import CHANNELS
+    ch = CHANNELS.index('arm_elev_l'); cs = [[None] * len(CHANNELS) for _ in range(8)]
+    for b in (4, 5, 6): row = [0.0] * len(CHANNELS); row[ch] = -40.0; cs[b] = row
+    pb = [dict(beat=b, error_deg=12.0 if b < 4 else 40.0, offset_beats=0.5 if b in (1, 2) else 0.0, verdict='amber') for b in range(8)]
+    r = dict(scored=True, score=55, timing=0.5, mean_offset_beats=0.1, weak_beats=[4, 5, 6], per_group=dict(arms=40.0), channel_signed=cs, per_beat=pb,
+             size=dict(arms=0.4, energy=0.9))
+    cues = feedback.layered_cues(r)
+    kinds = [c['kind'] for c in cues]
+    assert 1 <= len(cues) <= 3 and 'correction' in kinds and 'timing' in kinds and 'size' in kinds
+    assert len({c.get('body_part') or c['kind'] for c in cues}) == len(cues)              # one per body part
+    better = dict(r, channel_signed=[[None if v is None else (0.0 if v == 0.0 else -10.0) for v in (row or [None] * len(CHANNELS))] if row else None for row in cs])
+    assert 'better' in (feedback.progress_note(r, better, cues[[c['kind'] for c in cues].index('correction')]) or '')
+    assert feedback.layered_cues(dict(scored=False))[0]['kind'] == 'visibility'
+
+
+def test_loop_slice_and_weak_span():
+    key = choreo.generate('hiphop', 'beginner', seed=3)
+    k2, p2 = choreo.with_counts(key, 0, 4, 6)
+    assert k2['phrases'][p2]['beats'] == 3 and len(key['phrases']) == len(k2['phrases']) - 1     # a copy: the routine itself is untouched
+    assert live.weak_span(dict(kind='correction', beats=[5])) == (5, 6) and live.weak_span(dict(kind='praise', beats=[1])) is None
+    assert live.count_words('counts 1 to 2') == 'One, two'

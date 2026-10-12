@@ -1,0 +1,2 @@
+# Team additions on top of the starter's requirements.txt (install both: pip install -r requirements.txt -r team/requirements.txt)
+livekit-plugins-noise-cancellation==0.3.2   # team/dance/audio_in.py: Krisp background-voice cancellation (DANCE_NC; LiveKit Cloud only, off otherwise)

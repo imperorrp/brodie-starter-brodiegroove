@@ -34,6 +34,7 @@ class PhraseEngine:
         self.countin_beats = int(countin_beats); self.rtt_s = float(rtt_s); self.extra_beats = int(extra_beats)
         self.on_event_cb = on_event; self.skip_show = bool(skip_show or freestyle); self.mirror_live = bool(mirror_live)
         self.freestyle = bool(freestyle); self.live_skel = []                    # (t_phrase, (33,2) normalised skeleton) during the attempt
+        self.live_3d = []                                                        # (t_phrase, body_frame_signals) during the attempt (depth / facing)
         self.focus = focus                                                       # 'arms': score the arm channels only (the simplified breakdown)
         self.aborted = False; self.step = None
         self.demo_only = bool(demo_only)                                         # the reference only: show, then done (no count-in, no attempt)
@@ -95,8 +96,13 @@ class PhraseEngine:
         if self.state == 'attempt':
             f = features_from_landmarks(lm_img, lm_world); m = visibility_mask(lm_img)
             e = hip_energy(self.prev_lm, lm_img, (t - self.prev_t) if self.prev_t is not None else 0.0)
-            from .features import skeleton2d_normalized
+            from .features import skeleton2d_normalized, body_frame_signals
             self.live_skel.append((self.attempt_t(t), skeleton2d_normalized(lm_img)))
+            if lm_world is not None:
+                try:
+                    b3 = body_frame_signals(lm_world, lm_img)
+                    if b3 is not None: self.live_3d.append((self.attempt_t(t), b3))
+                except Exception: pass
             self.on_features(t, f, m, e)
         self.prev_lm = self.last_lm; self.prev_t = t
 
@@ -172,6 +178,9 @@ class PhraseEngine:
         else:
             self.result = score_phrase(F, M, E, self.kF, self.kM, self.kE, per_beat=self.pb)
         self.result['frames'] = len(self.live); self.result['key'] = self.key['name']; self.result['phrase'] = self.pi; self.result['tempo'] = self.tempo
+        if not self.freestyle:
+            try: self.result.update(self._extras(F, M, E))
+            except Exception as e: self.result['extras_error'] = repr(e)
         if self.freestyle:
             g = self.result.get('groove', {})
             if not self.result['scored']: self.cue = dict(text='Step back so I can see all of you', kind='visibility', group=None, beats=[])
@@ -184,6 +193,36 @@ class PhraseEngine:
         self.emit('attempt_ended', frames=len(self.live))
         self.emit('phrase_scored', **{k: v for k, v in self.result.items() if k != 'per_beat'}, per_beat=self.result['per_beat'])
         self.emit('cue_decided', **self.cue)
+
+    def _extras(self, F, M, E):
+        """Detail for richer coaching, from data already here: per-count 3D signals (median over the count, shifted by the mean timing
+        offset), how big the arm and hip movement was against the reference (range of motion), and the hip-energy level."""
+        out = {}
+        off = float(self.result.get('mean_offset_beats') or 0.0)
+        if self.live_3d:
+            per = [dict() for _ in range(self.n_beats)]
+            keys = ('arm_fwd_l', 'arm_fwd_r', 'torso_twist', 'facing_yaw')
+            for b in range(self.n_beats):
+                t0, t1 = (b + off) * self.beat_s, (b + 1 + off) * self.beat_s
+                rows = [d for tp, d in self.live_3d if t0 <= tp < t1]
+                for k in keys:
+                    vals = [r[k] for r in rows if r.get(k) is not None]
+                    per[b][k] = float(np.median(vals)) if len(vals) >= 2 else None
+            out['body3d'] = per
+        n = min(len(F), len(self.kF))
+        size = {}
+        for name, chans in (('arms', [2, 3, 10, 11]), ('hips', [4, 5])):
+            ratios = []
+            for c in chans:
+                mk = self.kM[:n, c].astype(bool); ml = M[:n, c].astype(bool)
+                if mk.sum() < 4 or ml.sum() < 4: continue
+                kr = float(np.ptp(self.kF[:n, c][mk])); lr = float(np.ptp(F[:n, c][ml]))
+                if kr >= 25.0: ratios.append(lr / kr)
+            if ratios: size[name] = round(float(np.median(ratios)), 2)
+        ke = float(np.mean(self.kE)) if len(self.kE) else 0.0; le = float(np.mean(E[:n])) if n else 0.0
+        if ke > 0.05: size['energy'] = round(le / ke, 2)
+        out['size'] = size
+        return out
 
     def abort(self, t):
         """Stop the phrase now (pause or safety stop): no result, state done."""

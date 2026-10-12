@@ -88,8 +88,12 @@ def test_directional_cues():
     assert c['kind'] == 'correction' and 'left' in c['text'] and 'higher' in c['text'] and '5 to 7' in c['text'] and c['group'] == 'arms'
     c = feedback.structured_cue(_result_with(CHANNELS.index('knee_r'), 30.0))
     assert 'Bend your right knee' in c['text'] and c['short'] == 'BEND RIGHT KNEE'
-    late = dict(scored=True, timing=0.3, mean_offset_beats=0.5, weak_beats=[2, 3, 4], score=50, per_group={})
-    assert feedback.structured_cue(late)['error_type'] == 'late'
+    pb = [dict(beat=b, error_deg=12.0, offset_beats=0.5 if b in (2, 3, 4) else 0.0, verdict='amber') for b in range(8)]
+    late = dict(scored=True, timing=0.3, mean_offset_beats=0.5, weak_beats=[2, 3, 4], score=50, per_group={}, per_beat=pb)
+    c = feedback.structured_cue(late); assert c['error_type'] == 'late' and '3 to 5' in c['text']
+    shapes = [dict(beat=b, error_deg=45.0, offset_beats=0.0, verdict='red') for b in range(8)]     # bad shapes, on time: never "early"
+    c = feedback.structured_cue(dict(scored=True, timing=0.2, mean_offset_beats=0.0, weak_beats=list(range(8)), score=30, per_group=dict(arms=40.0), per_beat=shapes))
+    assert c['kind'] != 'timing' and 'early' not in c['text']
     assert feedback.structured_cue(dict(scored=False))['kind'] == 'visibility'
 
 

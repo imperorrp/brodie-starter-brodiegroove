@@ -117,8 +117,19 @@ def dance_get_result(code: str):
 
 
 @app.get('/dance/leaderboard')
-def dance_leaderboard(key: str = None, limit: int = 20):
-    return db.leaderboard(key, limit)
+def dance_leaderboard(key: str = None, limit: int = 20, mode: str = None, since: float = None):
+    return db.leaderboard(key, limit, mode=mode, since=since)
+
+
+@app.get('/dance/code/{code}')
+def dance_resolve_code(code: str):
+    """What a spoken code is: a battle result, a telephone chain or a class."""
+    return db.resolve_code(code)
+
+
+@app.get('/dance/daily_played')
+def dance_daily_played(name: str, key: str):
+    return dict(played=db.daily_played(name, key))
 
 
 @app.get('/dance/history')

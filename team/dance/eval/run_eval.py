@@ -19,16 +19,43 @@ DB = os.path.join(OUT, 'eval_team.db')
 FAST = dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='400')
 
 
-def scenarios(clip):
+def fixtures():
+    """Codes to join in the eval DB: a friend's battle result, a telephone chain (link 1 is a real routine, so link 2 can copy and be
+    compared), and a recorded class. Returns {battle, telephone, class} -> code."""
+    os.environ['TEAM_DB'] = DB
+    import importlib.util
+    sys.path.insert(0, ROOT)
+    spec = importlib.util.spec_from_file_location('eval_team_db', os.path.join(ROOT, 'team', 'backend', 'db.py'))
+    db = importlib.util.module_from_spec(spec); spec.loader.exec_module(db); db.init()
+    from team.dance import choreo
+    k = choreo.generate('hiphop', 'beginner', seed=11)
+    k1 = dict(k, phrases=[k['phrases'][0]])
+    import numpy as _np
+    def js(x): return {kk: (v.tolist() if isinstance(v, _np.ndarray) else v) for kk, v in x.items()}
+    return dict(battle=db.add_result('Sam', k['name'], 'battle', 240.0, [], score100=80.0),
+                telephone=db.start_chain(k['name'], dict(name='Ana', key=js(k1), score=100.0, fidelity_prev=None, fidelity_origin=None)),
+                **{'class': db.start_class('Mia', js(dict(k1, name='class_eval')))})
+
+
+def spoken(code): return ' '.join(str(code))
+
+
+def scenarios(clip, codes=None):
+    codes = codes or {}
     base = ['--simulate', clip, '--pose', 'lite']
+    real = base + ['--realistic', '--mode', 'learn', '--lobby']
     flow = ['--say', '16:yes', '--say', '30:yes', '--say', '38:yes', '--say', '46:ready', '--say', '54:ready']      # offer yes, space yes, ready
     return [
         dict(name='long_chat', args=base + ['--mode', 'learn', '--lobby', '--say', "2:Hi I'm Maya", '--say', '6:where do I start?', '--say', "10:what's a battle?",
                                             '--say', "14:I'm not ready", '--say', "18:ok let's go", '--say', '22:maybe dance later', '--say', '26:I like K-pop'],
-             env=dict(DANCE_MAX_S='70'), gestures=['8:ready:2'], checks=['completed', 'no_start', 'no_offer', 'proactive']),
-        dict(name='proactive', args=base + ['--mode', 'learn', '--lobby', '--say', '19:yes', '--say', '30:yes', '--say', '38:yes', '--say', '46:ready']
-             + sum((['--say', f'{t}:ready'] for t in range(58, 200, 9)), []),
-             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='300'), checks=['completed', 'proactive', 'confirmed_before_dance']),
+             env=dict(DANCE_MAX_S='70'), gestures=['8:ready:2'], checks=['completed', 'no_start', 'no_offer', 'no_auto_offer']),
+        # v6: CHOOSE. Nothing is offered by itself; a quiet caller gets the card highlight, and both hands up picks the lit card
+        dict(name='choose_cards_gesture', args=base + ['--mode', 'learn', '--lobby'], gestures=['30:ready:2'],
+             env=dict(DANCE_MAX_S='45'), checks=['completed', 'no_auto_offer', 'card_cycle', 'picked_by_card', 'no_start']),
+        dict(name='choose_noise', args=real + ['--say', '3:so then she told him the whole story about the party and everybody laughed for ages',
+                                               '--say', '9:mm', '--say', '14:and the dog ate the cake when nobody was looking at all'],
+             env=dict(DANCE_MAX_S='40'), checks=['completed', 'no_offer', 'card_cycle_noisy', 'no_start']),
+        dict(name='choose_voice', args=real + ['--say', '4:ghost battle'], env=dict(DANCE_MAX_S='25'), checks=['completed', 'offered_battle', 'no_start']),
         dict(name='question_no_offer', args=base + ['--mode', 'learn', '--lobby', '--say', '3:Today I want to dance some hip hop. Is that possible?',
                                                     '--say', '9:what styles do you have?'], env=dict(DANCE_MAX_S='40'), checks=['completed', 'no_offer', 'no_start']),
         dict(name='offer_needs_yes', args=base + ['--mode', 'learn', '--lobby', '--say', '3:teach me hip hop', '--say', '12:hmm what is that like?',
@@ -41,6 +68,68 @@ def scenarios(clip):
         dict(name='patient_answers', args=base + ['--mode', 'learn', '--lobby', '--say', '2:teach me hip hop', '--say', '12:yes', '--say', '24:yes']
              + sum((['--say', f'{t}:ready'] for t in range(32, 300, 9)), []),
              env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='300'), checks=['completed', 'demo_first', 'teaching_order', 'slow_start', 'speed_by_consent']),
+        dict(name='space_late_answer', args=base + ['--mode', 'learn', '--lobby', '--say', '2:teach me hip hop', '--say', '12:yes', '--say', '62:yes',
+                                                    '--say', '72:ready'], env=dict(DANCE_MAX_S='90'), checks=['completed', 'space_nudged', 'space_late', 'reached_confirm']),
+        dict(name='space_gesture', args=base + ['--mode', 'learn', '--lobby', '--say', '2:teach me hip hop', '--say', '12:yes'],
+             gestures=['40:ready:2'], env=dict(DANCE_MAX_S='70'), checks=['completed', 'space_by_gesture', 'reached_confirm']),
+        # real-call timing (lines take time, Gemini replies, transcripts arrive late) and a caller who answers Brodie's actual lines
+        dict(name='real_flow', args=real + ['--say', '3:My name is Brian and I want to dance hip-hop today.', '--answer', "offer:All right. Let's start it.",
+                                            '--answer', 'space:yes', '--answer', 'confirm:ready', '--answer', 'gotit:got it', '--answer', 'choice:next'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='260'), checks=['completed', 'offer_accepted', 'confirmed_before_dance', 'ladder', 'no_double_lines']),
+        dict(name='real_hands', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:yeah', '--answer', 'space:de Hello', '--answer', 'space_nudge:@hands',
+                                             '--answer', 'confirm:@hands', '--answer', 'gotit:@hands'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='160'), checks=['completed', 'space_by_gesture', 'confirmed_before_dance', 'demo_first']),
+        dict(name='real_next_at_watch', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:sure', '--answer', 'space:yep', '--answer', 'confirm:ready',
+                                                     '--answer', 'gotit:next'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='200'), checks=['completed', 'withme_after_next']),
+        dict(name='real_silence', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:yes'],
+             env=dict(DANCE_MAX_S='300'), checks=['completed', 'space_assumed', 'never_silent_in_flow', 'back_to_chat', 'no_start']),
+        dict(name='real_silence_after_result', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:yes', '--answer', 'space:yes',
+                                                            '--answer', 'confirm:ready', '--answer', 'gotit:got it'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='300'), checks=['completed', 'no_dead_air']),
+        dict(name='real_flicker', args=real + ['--flicker', '0.25', '--say', '3:teach me hip hop', '--answer', 'offer:yes', '--answer', 'space:yes',
+                                               '--answer', 'confirm:ready'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='160'), checks=['completed', 'reached_confirm', 'never_silent_in_flow']),
+        dict(name='real_seated', args=real + ['--crop-bottom', '0.55', '--say', '3:teach me hip hop', '--answer', 'offer:yes', '--answer', 'setup:arms only',
+                                              '--answer', 'space:yes', '--answer', 'confirm:ready'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='200'), checks=['completed', 'upper_body_used', 'never_silent_in_flow']),
+        # v5: the opening menu and every site mode, by voice, with real-call timing
+        dict(name='menu_what_can_you_do', args=real + ['--say', '3:what can you do?', '--say', '20:ghost battle', '--answer', 'offer:yes', '--answer', 'space:yes',
+                                                       '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='90'),
+             checks=['completed', 'menu_twice', 'offered_battle']),
+        dict(name='menu_pick_battle', args=real + ['--say', '3:ghost battle', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='260'), checks=['completed', 'battle_three_rounds', 'code_posted', 'speed_round', 'back_to_menu']),
+        dict(name='menu_pick_daily', args=real + ['--say', '3:the daily', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready',
+                                                  '--answer', 'gotit:got it', '--answer', 'choice:next'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='520'), checks=['completed', 'daily_shot_posted']),
+        dict(name='menu_pick_squad', args=real + ['--players', '2', '--say', '3:squad battle', '--answer', 'offer:yes', '--answer', 'space:yes',
+                                                  '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='240'),
+             checks=['completed', 'squad_two', 'squad_rounds']),
+        dict(name='squad_alone_goes_solo', args=real + ['--say', '3:squad battle', '--answer', 'offer:yes', '--answer', 'space:yes',
+                                                        '--answer', 'squadneed:just me', '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='220'),
+             checks=['completed', 'squad_to_solo', 'battle_three_rounds']),
+        dict(name='menu_pick_telephone', args=real + ['--say', "3:let's play telephone", '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready'],
+             env=dict(DANCE_MAX_S='110'), checks=['completed', 'chain_started']),
+        dict(name='telephone_join_by_code', args=real + ['--say', f"3:I have a code, {spoken(codes.get('telephone', '0000'))}", '--answer', 'offer:yes',
+                                                         '--answer', 'space:yes', '--answer', 'confirm:ready'], env=dict(DANCE_MAX_S='130'),
+             checks=['completed', 'chain_joined', 'compare_shown']),
+        dict(name='class_lead_two', args=real + ['--players', '2', '--say', '3:a group class please', '--answer', 'offer:yes', '--answer', 'space:yes',
+                                                 '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='200'),
+             checks=['completed', 'class_led_squad', 'posecount_spoken']),
+        dict(name='class_record_join', args=real + ['--say', f"3:code {spoken(codes.get('class', '0000'))}", '--answer', 'offer:yes', '--answer', 'space:yes',
+                                                    '--answer', 'confirm:ready'], env=dict(DANCE_MAX_S='150'), checks=['completed', 'class_student']),
+        dict(name='battle_by_code', args=real + ['--say', f"3:my friend's code is {spoken(codes.get('battle', '0000'))}", '--answer', 'offer:yes',
+                                                 '--answer', 'space:yes', '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='230'),
+             checks=['completed', 'duel']),
+        dict(name='learn_pose_step', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready',
+                                                  '--answer', 'gotit:got it', '--answer', 'choice:next'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='220'),
+             checks=['completed', 'pose_watch_first', 'pose_hold_3_5s', 'freeze_before_withme']),
+        dict(name='loop_weak_bar', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:yes', '--answer', 'space:yes', '--answer', 'confirm:ready',
+                                                '--answer', 'gotit:got it', '--answer', 'choice:loop it', '--answer', 'choice:next'],
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='320'), checks=['completed', 'looped']),
+        dict(name='garbled_answers', args=real + ['--say', '3:teach me hip hop', '--answer', 'offer:de', '--answer', 'unclear:yes', '--answer', 'space:yes',
+                                                  '--answer', 'confirm:ready'], env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='120'),
+             checks=['completed', 'unclear_asked', 'offer_accepted']),
         dict(name='setup_wait', args=base + ['--mode', 'learn', '--lobby', '--crop-bottom', '0.62', '--say', '3:teach me pop', '--say', '14:yes'],
              env=dict(DANCE_MAX_S='90'), checks=['completed', 'setup_blocked', 'no_repeat_lines']),
         dict(name='setup_listens', args=base + ['--mode', 'learn', '--lobby', '--crop-bottom', '0.35', '--say', '3:teach me pop', '--say', '14:yes',
@@ -55,7 +144,7 @@ def scenarios(clip):
              env=dict(DANCE_MAX_S='40'), checks=['completed', 'forget', 'no_start']),
         dict(name='walk_in', args=base + ['--mode', 'battle', '--background'], env=FAST, checks=['completed', 'primary_locked_once']),
         dict(name='squad', args=base + ['--mode', 'learn', '--players', '2', '--lobby', '--say', "3:let's do a squad battle, hip hop"] + flow,
-             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='300'), checks=['completed', 'squad_two', 'squad_rounds']),
+             env=dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='145'), checks=['completed', 'squad_two', 'squad_rounds']),   # ends before the next suggestion (the stand-in's still frame has both hands up)
         dict(name='daily', args=base + ['--mode', 'daily', '--name', 'Ana'], env=FAST, checks=['completed', 'daily_key']),
     ]
 
@@ -99,6 +188,27 @@ def check(res, name):
     if name == 'squad_rounds': return any(r.get('squad') and len((r['squad'].get('ranking') or [])) >= 2 for r in d.get('rounds', []))
     if name == 'daily_key': return str(d.get('key', '')).startswith('gen_daily_')
     if name == 'no_offer': return not any(r['type'] == 'offer' and r.get('source') != 'brodie' for r in rows)    # Brodie's own suggestions are fine
+    if name == 'no_auto_offer': return not any(r['type'] == 'offer' and r.get('source') == 'brodie' for r in rows)
+    if name == 'card_cycle': return 'card_cycle' in types
+    if name == 'card_cycle_noisy': return any(r['type'] == 'card_cycle' and r.get('noisy') for r in rows)
+    if name == 'picked_by_card': return any(r['type'] == 'offer' and r.get('source') == 'card' for r in rows)
+    if name == 'back_to_menu':                            # the feature ends on the cards, and nothing new starts by itself
+        started = [r['t'] for r in rows if r['type'] == 'mode_started']
+        if not started: return False
+        after = [r for r in rows if r['t'] > started[0]]
+        return any(r['type'] == 'state' and r.get('to') == 'CHOOSE' for r in after) and             sum(1 for r in after if r['type'] == 'mode_started') == 0
+    if name == 'no_dead_air':                             # outside the music, Brodie or the caller speaks at least every 30 s
+        state = None; last = None
+        for r in rows:
+            if r['type'] == 'state':
+                state = r.get('to')
+                if last is None: last = r['t']
+            elif r['type'] in ('speech', 'caller_said', 'dead_air'):
+                if last is not None and state in ('CHOOSE', 'OFFER', 'CONFIRM', 'REVIEW') and r['t'] - last > 30.0: return False
+                last = r['t']
+            if r['type'] == 'state' and r.get('to') == 'ACTIVITY': last = None
+            elif r['type'] == 'state' and last is None: last = r['t']
+        return True
     if name == 'proactive': return any(r['type'] == 'offer' and r.get('source') == 'brodie' for r in rows)
     if name == 'offered': return 'offer' in types
     if name == 'no_setup': return not any(r['type'] == 'state' and r.get('to') == 'PREPARE' for r in rows)
@@ -131,6 +241,60 @@ def check(res, name):
         return ok and jumps and (max(tempos) if tempos else 0) < 1.0
     if name == 'no_start': return 'attempt_started' not in types and 'activity_requested' not in types
     if name == 'setup_blocked': return 'setup_issue' in types and 'attempt_started' not in types
+    if name == 'offer_accepted': return 'offer_accepted' in types
+    if name == 'menu_twice': return types.count('menu') >= 2
+    if name == 'offered_battle': return any(r['type'] == 'offer' and r.get('mode') == 'battle' for r in rows)
+    if name == 'speed_round': return any(e.get('event') == 'start' and str(e.get('stage')) == 'CHALLENGE' for e in d.get('log', [])) and \
+            len({e.get('tempo') for e in d.get('log', []) if e.get('event') == 'start' and e.get('stage') == 'CHALLENGE'}) >= 2
+    if name == 'daily_shot_posted':
+        posts = [e for e in d.get('log', []) if e.get('event') == 'result_posted']
+        return str(d.get('key', '')).startswith('gen_daily_') and any(r.get('kind') == 'DAILY' for r in d.get('rounds', [])) and len(posts) == 1
+    if name == 'squad_to_solo': return 'squad_to_solo' in types
+    if name == 'chain_started': return any(r.get('mode') == 'telephone' and r.get('link') == 1 and r.get('code') for r in d.get('rounds', []))
+    if name == 'chain_joined': return any(r.get('mode') == 'telephone' and (r.get('link') or 0) >= 2 for r in d.get('rounds', []))
+    if name == 'compare_shown': return 'compare' in types
+    if name == 'class_led_squad': return any(r['type'] == 'mode_started' and r.get('mode') == 'class' and r.get('call_mode') == 'squad' for r in rows)
+    if name == 'posecount_spoken': return any(r['type'] == 'speech' and r.get('key') == 'posecount' for r in rows)
+    if name == 'class_student': return any(r.get('mode') == 'class' and r.get('role') == 'student' for r in d.get('rounds', []))
+    if name == 'pose_watch_first':
+        st = [r.get('why') for r in rows if r['type'] == 'state' and r.get('to') == 'ACTIVITY']
+        return bool(st) and st[0] == 'WATCH' and 'pose_step_done' in types
+    if name == 'pose_hold_3_5s':
+        ts = [r['t'] for r in rows if r['type'] == 'pose_count' and r.get('why') == 'held']
+        gaps = [b - a for a, b in zip(ts, ts[1:]) if b - a < 10]
+        return len(gaps) >= 2 and all(3.0 <= g <= 4.2 for g in gaps)
+    if name == 'freeze_before_withme':
+        st = [r.get('why') for r in rows if r['type'] == 'state' and r.get('to') == 'ACTIVITY']
+        return 'MATCH IT' in st and 'WITH ME' in st and st.index('MATCH IT') < st.index('WITH ME')
+    if name == 'looped': return 'loop' in types
+    if name == 'unclear_asked': return 'unclear' in types
+    if name == 'no_double_lines':
+        said = [(e['t'], e.get('ask', '')) for e in d.get('log', []) if 'ask' in e and 'note' not in e and 'result' not in e]
+        return all(not (b == a and tb - ta < 5) for (ta, a), (tb, b) in zip(said, said[1:])) and not any('Private instruction' in a for _, a in said)
+    if name == 'withme_after_next':
+        st = [r.get('why') for r in rows if r['type'] == 'state' and r.get('to') == 'ACTIVITY']
+        return [x for x in st if x != 'MATCH IT'][:2] == ['WATCH', 'WITH ME']     # beginners match the poses (freeze) in between
+    if name == 'space_assumed': return 'space_assumed' in types
+    if name == 'back_to_chat':
+        seen = False
+        for r in rows:
+            if r['type'] == 'state' and r.get('to') == 'CONFIRM': seen = True
+            if seen and r['type'] == 'state' and r.get('to') in ('EXPLORE', 'CHOOSE'): return True
+        return False
+    if name == 'never_silent_in_flow':                    # in the camera check and ready check Brodie never goes quiet for a minute
+        state = None; last = 0.0
+        for r in rows:
+            if r['type'] == 'state': state = r.get('to'); last = r['t']
+            elif r['type'] in ('speech', 'caller_said'):
+                if state in ('PREPARE', 'CONFIRM') and r['t'] - last > 60.0: return False
+                last = r['t']
+        return True
+    if name == 'space_nudged': return 'space_nudge' in types and types.count('space_asked') == 1
+    if name == 'space_late': return any(r['type'] == 'space_confirmed' and (r.get('late') or 0) >= 20 for r in rows)
+    if name == 'space_by_gesture':
+        g = [r['t'] for r in rows if r['type'] == 'gesture' and r.get('kind') == 'ready']; c = [r['t'] for r in rows if r['type'] == 'space_confirmed']
+        return bool(g) and bool(c) and min(c) >= min(g)
+    if name == 'reached_confirm': return any(r['type'] == 'state' and r.get('to') == 'CONFIRM' for r in rows)
     if name == 'confirmed_before_dance':
         ti = [r['t'] for r in rows if r['type'] == 'confirmed']; ta = [r['t'] for r in rows if r['type'] == 'attempt_started']
         return bool(ti) and bool(ta) and min(ta) > min(ti) and 'space_confirmed' in types
@@ -147,7 +311,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     os.makedirs(OUT, exist_ok=True)
     if os.path.exists(DB) and not a.only: os.remove(DB)
-    scs = scenarios(a.clip)
+    scs = scenarios(a.clip, fixtures())
     if a.only: scs = [s for s in scs if s['name'] in a.only.split(',')]
     with ThreadPoolExecutor(max_workers=a.jobs) as ex: results = list(ex.map(lambda s: run_one(s, a.clip), scs))
     # the duel: a second caller says the battle's code

@@ -1,10 +1,11 @@
 """Hands-free controls from the pose. The starter's echo guard mutes the caller's mic while Brodie's music plays, so a spoken
 "pause" can never land mid-phrase; a held pose can.
 
-  both hands up, apart, held 1.0 s                    -> 'ready'  (also 'resume' when paused)
+  both hands up, apart, still, held 1.0 s            -> 'ready'  (also 'resume' when paused)
   arms crossed above the head, still, held 1.2 s     -> 'pause'
 
-The stillness rule (wrists barely moving) keeps arm-heavy moves such as waacking from triggering a pause. Image landmarks,
+The stillness rule (wrists barely moving) keeps arm-heavy moves (waacking, jumping jacks, a stretch) from triggering a pause or
+a "yes": a dancer with arms overhead once answered an offer nobody had heard. Image landmarks,
 unmirrored (MediaPipe's left wrist is the person's left; facing the camera it sits at the larger x, so crossed means L.x < R.x).
 """
 import numpy as np
@@ -36,18 +37,25 @@ def _torso(a):
 class GestureDetector:
     def __init__(self):
         self.kind = None; self.since = None; self.last_fire = -1e9; self.prev = None; self.prev_t = None; self.fired = False
+        self.blocked = None             # a hold that already fired and is still held: it can't answer the next question
 
     def reset(self):
+        """Start fresh for a new question. A hold still in progress restarts; one that already fired (hands still up after picking
+        a card) is blocked until the hands come down, so one gesture never answers two questions."""
+        self.blocked = self.kind if self.fired else None
         self.kind = None; self.since = None; self.fired = False
 
     def update(self, t, lm):
         """Feed one frame; returns 'ready' / 'pause' once when a hold completes, else None."""
         k = classify(lm)
-        if k == 'pause' and self.prev is not None and self.prev_t is not None and t > self.prev_t:
+        if k in ('pause', 'ready') and self.prev is not None and self.prev_t is not None and t > self.prev_t:   # held still, not danced
             a = np.asarray(lm, np.float32); p = self.prev
             speed = max(np.linalg.norm(a[L_WR, :2] - p[L_WR, :2]), np.linalg.norm(a[R_WR, :2] - p[R_WR, :2])) / _torso(a) / (t - self.prev_t)
             if speed > STILL: k = None
         self.prev = None if lm is None else np.asarray(lm, np.float32); self.prev_t = t
+        if self.blocked is not None:
+            if classify(lm) == self.blocked: return None                       # still the same raised arms
+            self.blocked = None
         if k != self.kind: self.kind = k; self.since = t if k else None; self.fired = False
         if k is None or self.fired or t - self.last_fire < COOLDOWN_S: return None
         if t - self.since >= HOLD[k]:

@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- Day 0 (Sun 10/11) teaser: Brodie's incoming call that you can't answer yet. No line on purpose. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 9cqh; }
+  .top { margin-bottom: calc(var(--u) * 9); }
+  .call { position: relative; width: calc(var(--u) * 36); aspect-ratio: 1; display: grid; place-items: center; flex: none; }
+  .call .r { position: absolute; border-radius: 50%; border: calc(var(--u) * .35) solid var(--volt); }
+  .call .r1 { inset: -14%; opacity: .3; } .call .r2 { inset: -28%; opacity: .15; } .call .r3 { inset: -42%; opacity: .07; }
+  .call .face { position: absolute; inset: 0; border-radius: 50%; background: var(--ink3); border: calc(var(--u) * .9) solid var(--volt); overflow: hidden;
+    box-shadow: 0 0 calc(var(--u) * 10) rgba(217,255,61,.35); }
+  .call .face img { width: 100%; height: 100%; object-fit: contain; padding: 9% 7% 0; object-position: 50% 100%; }
+  .main { display: flex; flex-direction: column; align-items: center; }
+  .name { font-size: calc(var(--u) * 10.5); margin-top: calc(var(--u) * 7.5); }
+  .sub { font: 500 calc(var(--u) * 3.4) var(--grotesk); color: var(--mut); margin-top: calc(var(--u) * 1.2); }
+  .when { font-size: calc(var(--u) * 12.6); margin-top: calc(var(--u) * 3.5); }
+  .slide { margin-top: calc(var(--u) * 4.5); width: calc(var(--u) * 66); display: flex; align-items: center; gap: calc(var(--u) * 2.4); padding: calc(var(--u) * 1.1);
+    border-radius: 999px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); }
+  .slide .knob { width: calc(var(--u) * 8.5); height: calc(var(--u) * 8.5); border-radius: 50%; background: var(--line); display: grid; place-items: center; flex: none; }
+  .slide .knob svg { width: 44%; fill: var(--mut); }
+  .slide span { flex: 1; text-align: left; font: 600 calc(var(--u) * 3.2) var(--grotesk); color: var(--mut); }
+  .slide b { font: calc(var(--u) * 2.6) var(--display); color: var(--ink); background: var(--volt); padding: calc(var(--u) * 1) calc(var(--u) * 2.2); border-radius: 999px; font-weight: normal; }
+  .marquee { bottom: 3cqh; }
+  .kick16 { display: none; }
+
+  .s9x16 { padding-bottom: 14cqh; }
+  .s9x16 .call { width: calc(var(--u) * 40); }
+  .s9x16 .top { margin-bottom: calc(var(--u) * 10); }
+  .s9x16 .name { font-size: calc(var(--u) * 11); margin-top: calc(var(--u) * 9); }
+  .s9x16 .when { font-size: calc(var(--u) * 11.5); }
+  .s9x16 .slide { width: calc(var(--u) * 62); }
+  .s9x16 .marquee { bottom: 9cqh; }
+
+  .s16x9 { flex-direction: row; justify-content: center; gap: 9cqw; text-align: left; padding-bottom: 6cqh; }
+  .s16x9 .top { display: none; }
+  .s16x9 .call { width: calc(var(--u) * 50); }
+  .s16x9 .main { align-items: flex-start; }
+  .s16x9 .name { margin-top: calc(var(--u) * 3); font-size: calc(var(--u) * 14); }
+  .s16x9 .when { font-size: calc(var(--u) * 15); }
+  .s16x9 .kick16 { display: block; }
+  .s16x9 .marquee { bottom: 4cqh; transform: rotate(-1.5deg); }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <div class="top"><div class="kicker"><span>NEW</span>A dance coach you FaceTime</div></div>
+
+  <div class="call"><i class="r r3"></i><i class="r r2"></i><i class="r r1"></i>
+    <div class="face"><img src="../../../data/tmp/promo/art/phone.png"></div></div>
+
+  <div class="main">
+    <div class="kick16"><div class="kicker"><span>NEW</span>A dance coach you FaceTime</div></div>
+    <div class="display name">BRODIE</div>
+    <div class="sub">is calling…</div>
+    <div class="display when v">TOMORROW.</div>
+    <div class="slide"><div class="knob"><svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3z"/></svg></div>
+      <span>slide to dance</span><b data-p="launch">MON 10.12</b></div>
+  </div>
+
+  <div class="marquee pink"><span>HIP-HOP</span><span>K-POP</span><span>HOUSE</span><span>WAACK</span><span>KRUMP</span><span>STREET JAZZ</span><span>LOCK</span><span>DANCE CARDIO</span><span>HIP-HOP</span><span>K-POP</span></div>
+</div>
+<script src="../config.js"></script><script src="../promo.js"></script>
+</body></html>

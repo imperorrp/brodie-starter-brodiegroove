@@ -117,6 +117,52 @@ class BrodieAvatar:
         return img
 
 
+@lru_cache(maxsize=16)
+def _round_mask(h, w, r):
+    m = np.zeros((h, w), np.uint8)
+    cv2.rectangle(m, (r, 0), (w - r - 1, h - 1), 1, -1); cv2.rectangle(m, (0, r), (w - 1, h - r - 1), 1, -1)
+    for cx, cy in ((r, r), (w - r - 1, r), (r, h - r - 1), (w - r - 1, h - r - 1)): cv2.circle(m, (cx, cy), r, 1, -1)
+    return m
+
+
+@lru_cache(maxsize=32)
+def _tile_pixels(variant, w, h, bob):
+    """The tile's pixels (cream background + the kit sprite), cached per variant, size and bob offset (a few pixels)."""
+    tile = np.empty((h, w, 3), np.uint8); tile[:] = CREAM[::-1]
+    spr = sprite(variant, int(h * 1.05))
+    sx = (w - spr.shape[1]) // 2 + int(w * 0.06); sy = int(h * 0.04) + bob
+    _blend(tile, spr, sx, sy)
+    tile.setflags(write=False)
+    return tile
+
+
+def _draw_tile(self, img, x0, y0, w, h, state='idle', t=0.0, still=False):
+    """Brodie in a FaceTime-style picture-in-picture tile (the site's .pip): kit cream background, rounded corners, a thin light
+    border; the border turns volt and pulses while he talks or listens; three dots while he is thinking."""
+    H, W = img.shape[:2]; x0, y0, w, h = int(x0), int(y0), int(w), int(h)
+    if x0 < 0 or y0 < 0 or x0 + w > W or y0 + h > H: return img
+    r = max(6, w // 7); m = _round_mask(h, w, r)
+    bob = 0 if still else int(round(h * 0.01 * math.sin(t * 2 * math.pi / 3.6)))
+    tile = _tile_pixels(self.variant(state, t), w, h, bob)
+    roi = img[y0:y0 + h, x0:x0 + w]; np.copyto(roi, tile, where=(m == 1)[:, :, None])
+    live = state in ('listening', 'speaking') and not still
+    pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi * 1.6)
+    col = VOLT_BGR if live else (200, 200, 200)
+    wd = max(2, w // 40) + (int(round(pulse * 2)) if live else 0)
+    for (a, b) in (((x0 + r, y0), (x0 + w - r, y0)), ((x0 + r, y0 + h - 1), (x0 + w - r, y0 + h - 1)), ((x0, y0 + r), (x0, y0 + h - r)), ((x0 + w - 1, y0 + r), (x0 + w - 1, y0 + h - r))):
+        cv2.line(img, a, b, col, wd, cv2.LINE_AA)
+    for (cx, cy), ang in (((x0 + r, y0 + r), 180), ((x0 + w - r - 1, y0 + r), 270), ((x0 + w - r - 1, y0 + h - r - 1), 0), ((x0 + r, y0 + h - r - 1), 90)):
+        cv2.ellipse(img, (cx, cy), (r, r), ang, 0, 90, col, wd, cv2.LINE_AA)
+    if state == 'thinking' and not still:
+        for i in range(3):
+            a = 0.5 + 0.5 * math.sin(t * 6 - i * 0.9)
+            cv2.circle(img, (x0 + w // 2 - w // 6 + i * w // 6, y0 + h - max(8, h // 12)), max(3, w // 24), tuple(int(v * (0.5 + 0.5 * a)) for v in VOLT_BGR), -1, cv2.LINE_AA)
+    return img
+
+
+BrodieAvatar.draw_tile = _draw_tile
+
+
 _AV = None
 
 

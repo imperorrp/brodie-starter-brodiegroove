@@ -74,7 +74,8 @@ def test_engine_freestyle_round_scores_without_a_ghost():
 
 def test_choose_cue_branches():
     assert choose_cue(dict(scored=False))['kind'] == 'visibility'
-    r = dict(scored=True, timing=0.3, mean_offset_beats=0.6, weak_beats=[1, 2], score=50, per_group=dict(arms=10.0, legs=5.0, torso=2.0))
+    pb = [dict(beat=b, error_deg=10.0, offset_beats=0.6 if b in (1, 2) else 0.0, verdict='amber') for b in range(8)]
+    r = dict(scored=True, timing=0.3, mean_offset_beats=0.6, weak_beats=[1, 2], score=50, per_group=dict(arms=10.0, legs=5.0, torso=2.0), per_beat=pb)
     assert choose_cue(r)['kind'] == 'timing'
     r = dict(scored=True, timing=0.9, mean_offset_beats=0.0, weak_beats=[], score=90, per_group=dict(arms=5.0, legs=5.0, torso=2.0))
     assert choose_cue(r)['kind'] == 'praise'

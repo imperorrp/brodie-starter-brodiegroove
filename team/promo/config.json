@@ -1,0 +1,20 @@
+{
+  "call_line": "",
+  "call_url": "",
+  "cta_kicker": "FaceTime Brodie",
+  "cta_pending_kicker": "The line opens",
+  "cta_pending": "MON 10.12",
+  "launch": "MON 10.12",
+  "handle": "@brodiegroove",
+  "hashtag": "#BeatMyBrodie",
+  "daily_style": {
+    "1": "Hip-hop", "2": "K-pop", "3": "Pop choreo", "4": "House",
+    "5": "Squad battle", "6": "Dance cardio", "7": "Street jazz"
+  },
+  "recap": {
+    "calls": "",
+    "top_score": "",
+    "top_style": "",
+    "s_ranks": ""
+  }
+}

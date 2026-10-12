@@ -141,3 +141,59 @@ def resample_mask(times, masks, grid_times):
 def unwrap_angles(F):
     """Angles here are all in [0, 180] from arccos, so no unwrapping is needed; kept as a hook for signed channels."""
     return np.asarray(F, np.float32)
+
+
+# ---- 3D body-frame signals (live only): which way a limb points, and which way the body faces ----
+def body_frame_signals(lm_world, lm_img=None, vis_thr=0.5):
+    """Signed 3D signals from MediaPipe world landmarks (metres, hip-centred; x right, y down, z away from the camera), in the
+    dancer's own body frame, or None without world landmarks or with the shoulders/hips unseen:
+      arm_fwd_l / arm_fwd_r : degrees the arm points out of the body's frontal plane (+ in front of the body, - behind; 0 = to the
+                              side, up or down in the plane), from shoulder to wrist; None when that arm isn't seen
+      torso_twist           : degrees the shoulder line is turned against the hip line (+ shoulders turned to the dancer's left)
+      facing_yaw            : degrees the shoulder line is turned against the camera (+ = turned to the dancer's own left)
+    The 2D angle channels can't tell these apart (a front raise and a side raise give the same angles)."""
+    if lm_world is None: return None
+    P = np.asarray(lm_world, np.float32)[:, :3]
+    V = np.asarray(lm_img, np.float32)[:, 3] if lm_img is not None and np.asarray(lm_img).shape[1] > 3 else np.ones(len(P), np.float32)
+    if min(V[L_SH], V[R_SH], V[L_HIP], V[R_HIP]) < vis_thr: return None
+    left = P[L_SH] - P[R_SH]                                    # towards the dancer's left
+    if np.linalg.norm(left) < 1e-4: return None
+    up = 0.5 * (P[L_SH] + P[R_SH]) - 0.5 * (P[L_HIP] + P[R_HIP])
+    xh = left / np.linalg.norm(left)
+    up = up - np.dot(up, xh) * xh
+    if np.linalg.norm(up) < 1e-4: return None
+    yh = up / np.linalg.norm(up)
+    zh = np.cross(xh, yh); zh /= (np.linalg.norm(zh) + 1e-9)
+    nose_dir = P[NOSE] - 0.5 * (P[L_SH] + P[R_SH])
+    if np.dot(nose_dir, zh) < 0: zh = -zh                       # forward is where the nose points (handedness differs by source)
+    out = dict(arm_fwd_l=None, arm_fwd_r=None)
+    for side, (sh, wr) in (('l', (L_SH, L_WR)), ('r', (R_SH, R_WR))):
+        if V[wr] < vis_thr: continue
+        v = P[wr] - P[sh]; n = float(np.linalg.norm(v))
+        if n < 0.08: continue                                   # hand at the shoulder: no direction
+        f = float(np.dot(v, zh)); inplane = float(np.hypot(np.dot(v, xh), np.dot(v, yh)))
+        out[f'arm_fwd_{side}'] = float(np.degrees(np.arctan2(f, inplane)))
+    hips = P[L_HIP] - P[R_HIP]
+    def yaw_of(d): return float(np.degrees(np.arctan2(d[2], d[0])))   # angle in the camera's x-z plane
+    out['torso_twist'] = float(((yaw_of(hips) - yaw_of(left) + 180) % 360) - 180)
+    out['facing_yaw'] = yaw_of(left)
+    return out
+
+
+def arm_planarity(skel2d, side):
+    """How much of a 2D skeleton's arm is visible in the picture plane: shoulder-elbow-wrist projected length (torso units, as in
+    skeleton2d_normalized). Compare against the same arm's longest projection in the routine: near 1 = to the side / up / down in the
+    plane, small = pointing at or away from the camera (foreshortened)."""
+    S = np.asarray(skel2d, np.float32)
+    sh, el, wr = (L_SH, L_EL, L_WR) if side == 'l' else (R_SH, R_EL, R_WR)
+    return float(np.linalg.norm(S[el] - S[sh]) + np.linalg.norm(S[wr] - S[el]))
+
+
+def arm_direction_2d(skel2d, side):
+    """'up' / 'out' / 'down' / 'across' for where the arm points in a 2D skeleton (y down, torso units)."""
+    S = np.asarray(skel2d, np.float32); sh, wr = (L_SH, L_WR) if side == 'l' else (R_SH, R_WR)
+    d = S[wr] - S[sh]; other = S[R_SH] if side == 'l' else S[L_SH]
+    if d[1] < -0.5 * abs(d[0]): return 'up'
+    if d[1] > 1.2 * abs(d[0]): return 'down'
+    if np.sign(d[0]) == np.sign(other[0] - S[sh][0]): return 'across'
+    return 'out'

@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- Day 7 (Sun 10/18) recap: "Week one on the line." Numbers come from config.json "recap" (fill in real ones before
+     posting), the wall is real HUD screenshots + the film's S-rank still, and Brodie keeps picking up. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 6cqw; }
+  h1 { font-size: calc(var(--u) * 11.5); margin-top: calc(var(--u) * 2); line-height: .92; }
+  .wall { position: relative; width: 100%; height: calc(var(--u) * 42); margin-top: calc(var(--u) * 3); }
+  .wall .shot { position: absolute; width: calc(var(--u) * 22); aspect-ratio: 9 / 14; }
+  .wall .shot img { object-position: 50% 0; }
+  .w1 { left: 2%; top: 8%; transform: rotate(-9deg); } .w2 { left: 22%; top: 0; transform: rotate(-3deg); z-index: 2; }
+  .w3 { left: 41%; top: 6%; transform: rotate(4deg); z-index: 3; } .w4 { right: 4%; top: 2%; transform: rotate(10deg); z-index: 2; }
+  .wall .chip { position: absolute; z-index: 5; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 1.6); width: 100%; margin-top: calc(var(--u) * 3); }
+  .st { background: rgba(18,18,21,.88); border: 1px solid var(--line); border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 2) calc(var(--u) * 1.4); }
+  .st b { display: block; font: calc(var(--u) * 5.4) / 1 var(--display); font-weight: normal; color: var(--paper); white-space: nowrap; }
+  .st span { display: block; margin-top: calc(var(--u) * .8); font: 600 calc(var(--u) * 1.9) var(--grotesk); color: var(--mut); }
+  .foot { display: flex; align-items: center; gap: calc(var(--u) * 4); margin-top: calc(var(--u) * 4); }
+  .ask { font: calc(var(--u) * 3.2) / 1.15 var(--display); text-transform: uppercase; text-align: left; }
+  .thanks { margin-top: calc(var(--u) * 2.6); }
+
+  .s9x16 h1 { font-size: calc(var(--u) * 10); }
+  .s9x16 .wall { height: calc(var(--u) * 38); }
+  .s9x16 .wall .shot { width: calc(var(--u) * 19); }
+  .s9x16 .stats { grid-template-columns: repeat(2, 1fr); }
+  .s9x16 .foot { flex-direction: column; gap: calc(var(--u) * 2.4); margin-top: calc(var(--u) * 3); }
+  .s9x16 .ask { text-align: center; }
+
+  .s16x9 { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; text-align: left; align-items: center; }
+  .s16x9 .left { display: flex; flex-direction: column; align-items: flex-start; }
+  .s16x9 .wall { height: calc(var(--u) * 60); margin: 0; }
+  .s16x9 .wall .shot { width: calc(var(--u) * 26); }
+  .s16x9 .stats { grid-template-columns: repeat(2, 1fr); }
+  .left { display: contents; }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <div class="left">
+    <div class="eyebrow">Week one · thank you</div>
+    <h1 class="display">Week one<br>on the <span class="v">line.</span></h1>
+    <div class="stats">
+      <div class="st"><b data-p="recap.calls">—</b><span>calls answered</span></div>
+      <div class="st"><b class="v" data-p="recap.s_ranks">—</b><span>S-ranks earned</span></div>
+      <div class="st"><b data-p="recap.top_score">—</b><span>top score</span></div>
+      <div class="st"><b class="pk" data-p="recap.top_style">—</b><span>most-called style</span></div>
+    </div>
+    <div class="foot" data-only="16x9"><div class="ask">Brodie's still<br><span class="v">picking up.</span></div><div data-cta></div></div>
+    <div class="tagline thanks" data-only="16x9">Thank you, IvyHacks × Chert, and everyone who called.</div>
+  </div>
+  <div class="wall">
+    <div class="shot w1"><img src="../../../data/tmp/hud/17_levelup.png"></div>
+    <div class="shot w2"><img src="../../../data/tmp/hud/16_recap.png"></div>
+    <div class="shot w3"><img src="../../../data/tmp/film/stills/075.0_m_s11.jpg"></div>
+    <div class="shot w4"><img src="../../../data/tmp/hud/10_challenge_fire.png"></div>
+    <div class="chip" style="left:30%;bottom:4%"><span class="big v">S</span> BEAT ASSASSIN</div>
+    <div class="chip" style="right:6%;bottom:12%;transform:rotate(-4deg)"><span class="big pk">×11</span> COMBO</div>
+  </div>
+  <div class="foot" data-only="4x5 9x16"><div class="ask">Brodie's still<br><span class="v">picking up.</span></div><div data-cta></div></div>
+  <div class="tagline thanks" data-only="4x5 9x16">Thank you, IvyHacks × Chert, and everyone who called.</div>
+</div>
+<script src="../config.js"></script><script src="../promo.js"></script>
+</body></html>

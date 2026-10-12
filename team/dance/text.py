@@ -19,7 +19,10 @@ FONT_DIR = os.path.join(HERE, 'assets', 'fonts')
 CANDIDATES = dict(
     display=[os.path.join(FONT_DIR, 'ArchivoBlack-Regular.ttf'), r'C:\Windows\Fonts\ariblk.ttf', '/System/Library/Fonts/Supplemental/Arial Black.ttf'],
     body=[os.path.join(FONT_DIR, 'PlusJakartaSans.ttf'), os.path.join(FONT_DIR, 'SpaceGrotesk.ttf'), r'C:\Windows\Fonts\segoeuib.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf'],
+    # the site's small labels: tags, chips, SCORE / BEST COMBO captions (Space Grotesk 700, uppercase, wide tracking)
+    grotesk=[os.path.join(FONT_DIR, 'SpaceGrotesk.ttf'), os.path.join(FONT_DIR, 'PlusJakartaSans.ttf'), r'C:\Windows\Fonts\segoeuib.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf'],
 )
+WEIGHT = dict(body=650, grotesk=700)
 try:
     from PIL import Image, ImageDraw, ImageFont
     HAVE_PIL = True
@@ -35,7 +38,7 @@ def _font(kind, px):
             try:
                 f = ImageFont.truetype(p, int(px))
                 if 'SpaceGrotesk' in p or 'PlusJakarta' in p:
-                    try: f.set_variation_by_axes([650])
+                    try: f.set_variation_by_axes([WEIGHT.get(kind, 650)])
                     except Exception: pass
                 return f
             except Exception:

@@ -9,6 +9,9 @@ stays on as a fallback (DANCE_TOOLS=0 turns the tools off); the session dedupes 
 """
 import asyncio, json, time
 
+KINDS = ('learn', 'battle', 'daily', 'squad_battle', 'squad_learn', 'telephone', 'class', 'class_record')
+KIND_ALIASES = dict(ghost_battle='battle', duel='battle', daily_challenge='daily', squad='squad_battle', dance_telephone='telephone', group_class='class',
+                    lesson='learn', routine='learn', record_class='class_record')
 ACTIONS = ('again', 'slower', 'faster', 'next', 'pause', 'resume', 'stop', 'simplify', 'explain', 'full', 'harder', 'easier')
 
 
@@ -20,7 +23,7 @@ def _err(e):
     return json.dumps(dict(ok=False, error=str(e)[:200]))
 
 
-def _run(session, name, fn, **args):
+def _run(session, name, fn, /, **args):
     """Call fn() with timing and error capture; supports plain and async results."""
     t = time.perf_counter(); ok = True; err = None
     try:
@@ -33,7 +36,7 @@ def _run(session, name, fn, **args):
         if tm is not None: tm.tool_result(name, (time.perf_counter() - t) * 1000.0, ok, err, **{k: v for k, v in args.items() if isinstance(v, (str, int, float, bool))})
 
 
-async def _arun(session, name, coro_fn, **args):
+async def _arun(session, name, coro_fn, /, **args):
     t = time.perf_counter(); ok = True; err = None
     try:
         return await asyncio.wait_for(coro_fn(), 4.0)
@@ -49,11 +52,17 @@ def build_tools(session):
 
     @function_tool
     async def propose_activity(kind: str = 'learn', style: str = '', difficulty: str = '') -> str:
-        """Call ONLY when the caller clearly asks to dance, learn, battle, or do the daily challenge (not for questions or "maybe").
-        It does not start dancing: it moves to camera setup and a ready check that the system runs. kind: learn, battle, daily.
-        style: hip-hop, pop, k-pop, house, fitness (dance cardio), waack, krump, jazz, lock. difficulty: beginner, intermediate, advanced."""
+        """Make an OFFER of one routine: call it when the caller clearly asks to dance, learn, battle or do the daily challenge, or
+        when you suggest a specific routine yourself (not for questions or "maybe"). It never starts anything: the system then waits
+        for the caller's clear yes, and only after that runs the camera check and a ready check. Calling it again for the same
+        routine changes nothing. kind: learn, battle (3-round ghost battle), daily (today's daily challenge), squad_battle (friends in
+        one camera, each scored), squad_learn (a lesson for the whole squad), telephone (dance telephone), class (Brodie leads a class,
+        everyone follows), class_record (a teacher records a class for students). style: hip-hop, pop, k-pop, house, fitness (dance
+        cardio), waack, krump, jazz, lock. difficulty: beginner, intermediate, advanced."""
         def go():
-            k = (kind or 'learn').strip().lower(); k = k if k in ('learn', 'battle', 'daily') else 'learn'
+            k = (kind or 'learn').strip().lower().replace(' ', '_').replace('-', '_')
+            k = KIND_ALIASES.get(k, k)
+            if k not in KINDS: return _err(f'unknown kind {kind!r}; use one of {", ".join(KINDS)}')
             return json.dumps(session.request_activity(mode=k, style=style or None, difficulty=difficulty or None, source='tool'))
         return _run(session, 'propose_activity', go, kind=kind, style=style, difficulty=difficulty)
 
@@ -65,14 +74,22 @@ def build_tools(session):
 
     @function_tool
     async def control_session(action: str) -> str:
-        """Change a routine that is already running: repeat, slow down, speed up, skip, pause, resume, stop, simplify, explain, the
-        full routine, harder or easier. It cannot start a routine (use propose_activity when they clearly ask to dance).
+        """Change a routine that is already running (or the results between moves): repeat, slow down, speed up, skip, pause,
+        resume, stop, simplify, explain, the full routine, harder or easier. It cannot start a routine and does nothing during the
+        camera check or ready check (except stop, which goes back to chat). The result says what will really happen; say only that.
         action: one of again, slower, faster, next, pause, resume, stop, simplify, explain, full, harder, easier."""
         def go():
             a = (action or '').strip().lower()
             if a not in ACTIONS: return _err(f'unknown action {a!r}; use one of {", ".join(ACTIONS)}')
             return _ok(**session.tool_command(a))
         return _run(session, 'control_session', go, action=action)
+
+    @function_tool
+    async def caller_answered(answer: str) -> str:
+        """Call this when the caller answers a yes/no or ready question that you or the system just asked them (want to start? do
+        you have space? ready? got it?), with what they meant: yes, no or ready. You hear them better than the transcript does, so
+        this is how a quiet or unclear "yeah" still counts. Never call it for anything else, and never guess: only a clear answer."""
+        return _run(session, 'caller_answered', lambda: _ok(**session.tool_answer(answer)), answer=answer)
 
     @function_tool
     async def set_preferences(personality: str = '', difficulty: str = '', style: str = '') -> str:
@@ -83,7 +100,8 @@ def build_tools(session):
 
     @function_tool
     async def check_camera() -> str:
-        """What the camera sees right now: which body parts are visible, a framing hint, how many dancers, and the tracking rate."""
+        """What the camera sees right now: which body parts are visible, a framing hint, how many dancers, and the tracking rate.
+        Before a routine has been accepted this is only a peek: the real camera check comes after the caller says yes."""
         return _run(session, 'check_camera', lambda: _ok(**session.camera_status()))
 
     @function_tool
@@ -127,7 +145,7 @@ def build_tools(session):
         """In a squad, give the dancer wearing a colour tag (volt, pink, cyan, amber) their first name."""
         return _run(session, 'assign_name', lambda: _ok(**session.assign_name(colour, name)), colour=colour, name=name)
 
-    return [propose_activity, confirm_start, control_session, set_preferences, check_camera, analyze_last_attempt, compare_with, generate_routine, get_profile, forget_me,
+    return [propose_activity, confirm_start, control_session, caller_answered, set_preferences, check_camera, analyze_last_attempt, compare_with, generate_routine, get_profile, forget_me,
             get_squad_status, set_call_mode, assign_name]
 
 

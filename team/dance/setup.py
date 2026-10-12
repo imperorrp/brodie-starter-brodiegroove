@@ -46,14 +46,24 @@ def _inside(p, m=MARGIN):
     return (m <= p[0] <= 1 - m) and (m <= p[1] <= 1 - m)
 
 
-def evaluate(lm, luma=None, upper=False):
-    """lm: (33, >=4) image landmarks (x, y, z, visibility) or None. luma: mean frame brightness 0-255 or None."""
+TOO_CLOSE_ON, TOO_CLOSE_OFF = 0.42, 0.38      # hysteresis: an issue starts at one threshold and clears only past the other,
+TOO_FAR_ON, TOO_FAR_OFF = 0.09, 0.11          # so a caller standing right on a line doesn't flip between "step back" and "come closer"
+CENTER_ON, CENTER_OFF = 0.25, 0.28
+
+
+def evaluate(lm, luma=None, upper=False, aspect=None, prev=None):
+    """lm: (33, >=4) image landmarks (x, y, z, visibility) or None. luma: mean frame brightness 0-255 or None. aspect: frame
+    width / height (landmark x and y are normalised separately, so a 16:9 webcam squeezed the shoulder width by about half and a
+    caller turned 40 degrees read as 'not facing'). prev: the issue currently being worked on (its clear threshold is stricter)."""
     issues = []; m = {}
+    close_t = TOO_CLOSE_OFF if prev == 'too_close' else TOO_CLOSE_ON
+    far_t = TOO_FAR_OFF if prev == 'too_far' else TOO_FAR_ON
+    edge = CENTER_OFF if prev == 'off_center' else CENTER_ON
     if lm is None:
         return dict(ok=False, issues=['no_person'], metrics=m, checks=dict(body=False, distance=False, light=luma is None or luma >= 55))
     a = np.asarray(lm, np.float32); v = a[:, 3]
     seen = lambda j: v[j] >= VIS and _inside(a[j, :2])
-    core = [NOSE, L_SH, R_SH] + ([L_EL, R_EL, L_WR, R_WR] if upper else [L_HIP, R_HIP])
+    core = [NOSE, L_SH, R_SH] + ([] if upper else [L_HIP, R_HIP])        # arms only: head and shoulders (arms come into view as they move)
     if not all(v[j] >= VIS for j in (L_SH, R_SH)):
         issues.append('no_person')
     head_in = seen(NOSE) or (v[NOSE] < VIS and a[NOSE, 1] > MARGIN)
@@ -61,10 +71,12 @@ def evaluate(lm, luma=None, upper=False):
     top = float(np.min(a[[NOSE, L_SH, R_SH], 1]))
     torso = float(np.linalg.norm(0.5 * (a[L_SH, :2] + a[R_SH, :2]) - 0.5 * (a[L_HIP, :2] + a[R_HIP, :2]))) if hips_in else None
     height = torso                                              # feet are ignored: head to hips is what we need to see
-    m.update(top=round(top, 3), height=None if height is None else round(height, 3))
+    m.update(top=round(top, 3), height=None if height is None else round(height, 3), hips_in=hips_in)
     hip_x = float(np.mean(a[[L_HIP, R_HIP], 0])) if all(v[j] >= VIS for j in (L_HIP, R_HIP)) else float(np.mean(a[[L_SH, R_SH], 0]))
     m['center_x'] = round(hip_x, 3)
-    sw = float(abs(a[L_SH, 0] - a[R_SH, 0])); tl = float(np.linalg.norm(0.5 * (a[L_SH, :2] + a[R_SH, :2]) - 0.5 * (a[L_HIP, :2] + a[R_HIP, :2]))) + 1e-6
+    ax = float(aspect) if aspect else 1.0
+    sw = float(abs(a[L_SH, 0] - a[R_SH, 0])) * ax
+    d = 0.5 * (a[L_SH, :2] + a[R_SH, :2]) - 0.5 * (a[L_HIP, :2] + a[R_HIP, :2]); tl = float(np.hypot(d[0] * ax, d[1])) + 1e-6
     m['facing'] = round(sw / tl, 3)
     vis_mean = float(np.mean(v[[NOSE, L_SH, R_SH, L_HIP, R_HIP]]))
     m['visibility'] = round(vis_mean, 3); m['luma'] = None if luma is None else round(float(luma), 1)
@@ -73,9 +85,9 @@ def evaluate(lm, luma=None, upper=False):
             if not all(seen(j) for j in core): issues.append('too_close')
         else:
             if not head_in or (top < MARGIN) or not hips_in: issues.append('too_close')     # head to hips must be in frame; feet never matter
-            elif height is not None and height > 0.42: issues.append('too_close')
-            elif height is not None and height < 0.09: issues.append('too_far')
-        if not (0.25 <= hip_x <= 0.75): issues.append('off_center')
+            elif height is not None and height > close_t: issues.append('too_close')
+            elif height is not None and height < far_t: issues.append('too_far')
+        if not (edge <= hip_x <= 1.0 - edge): issues.append('off_center')
     if (luma is not None and luma < 55) or ('no_person' not in issues and vis_mean < 0.45 and not upper): issues.append('dark')
     if 'no_person' not in issues and m['facing'] < 0.3: issues.append('not_facing')
     issues = [c for c in ORDER if c in issues]
@@ -103,6 +115,22 @@ CHECKIN = dict(
     dark=["Still a little dark for me. Any more light you can add?", "If you can, add a bit more light."],
     not_facing=["Turn a bit more toward the screen.", "Almost facing me. A little more."],
 )
+FIRST_UPPER = dict(
+    too_close=["Lean back a little so I can see your head and shoulders.", "Sit back a bit so your shoulders are in the picture."],
+)
+CHECKIN_UPPER = dict(
+    too_close=["Still a bit close. Lean back from the camera a little.", "Almost. Sit back so both shoulders are in."],
+)
+
+
+def lines_for(issue, upper, checkin=False):
+    """The spoken lines for an issue; arms-only mode has its own (never "down to your hips" or "say arms only" again)."""
+    if upper:
+        pool = (CHECKIN_UPPER if checkin else FIRST_UPPER).get(issue)
+        if pool: return pool
+    return (CHECKIN if checkin else FIRST)[issue]
+
+
 PARTS_SEEN = (('head', [NOSE]), ('shoulders', [L_SH, R_SH]), ('hips', [L_HIP, R_HIP]))     # feet are ignored on purpose
 
 
@@ -120,29 +148,36 @@ def camera_note(lm, issue=None, upper=False):
 
 
 class SetupTracker:
-    """Smooths per-frame verdicts: an issue counts once it holds for most of the last second, and the *current* issue only changes
-    after the new one has held HOLD_S (no step-back / step-in flip-flops). 'ok_stable' after STABLE_S of all-clear."""
+    """Smooths per-frame verdicts. 'ok_stable' once at least 65% of the frames in the last STABLE_S were fine (a single bad frame
+    used to reset it, so a reading that failed on a fifth of the frames never became stable and the setup went silent). The issue is
+    the most frequent one over the last HOLD_S, and the *current* issue only changes after the new one has led for a second (no
+    step-back / step-in flip-flops). 'top_raw' is the most frequent problem even when none is frequent enough to be the issue."""
     HOLD_S = 2.5
+    OK_SHARE = 0.65
 
     def __init__(self, upper=False):
-        self.upper = upper; self.hist = []; self.ok_since = None; self.issue = None; self.cand = None; self.cand_since = None
+        self.upper = upper; self.hist = []; self.issue = None; self.cand = None; self.cand_since = None; self.t_first = None
 
-    def update(self, t, lm, luma=None):
-        r = evaluate(lm, luma, self.upper)
-        self.hist.append((t, r)); self.hist = [(tt, rr) for tt, rr in self.hist if t - tt <= 1.0]
-        n = len(self.hist); counts = {}
+    def update(self, t, lm, luma=None, aspect=None):
+        r = evaluate(lm, luma, self.upper, aspect, prev=self.issue)
+        if self.t_first is None: self.t_first = t
+        self.hist.append((t, r)); self.hist = [(tt, rr) for tt, rr in self.hist if t - tt <= self.HOLD_S]
+        recent = [rr for tt, rr in self.hist if t - tt <= STABLE_S]
+        ok_share = sum(1 for rr in recent if rr['ok']) / max(1, len(recent))
+        covered = min(1.0, (t - self.t_first) / STABLE_S) if len(recent) > 1 else 0.0
+        ok_stable = covered >= 0.8 and ok_share >= self.OK_SHARE
+        counts = {}
         for _, rr in self.hist:
-            for c in rr['issues']: counts[c] = counts.get(c, 0) + 1
-        now_issue = next((c for c in ORDER if counts.get(c, 0) >= max(1, n // 2)), None)
-        if r['ok']:
-            if self.ok_since is None: self.ok_since = t
-        else:
-            self.ok_since = None
+            for c in rr['issues'][:1]: counts[c] = counts.get(c, 0) + 1
+        n = len(self.hist); bad = sum(counts.values())
+        top_raw = max(counts, key=lambda c: (counts[c], -ORDER.index(c))) if counts else None
+        now_issue = None if ok_stable or bad < 0.4 * n else top_raw
         if now_issue != self.issue:
             if now_issue != self.cand: self.cand = now_issue; self.cand_since = t
-            elif t - self.cand_since >= (1.0 if now_issue is None else self.HOLD_S if self.issue is not None else 1.0): self.issue = now_issue
+            elif t - self.cand_since >= 1.0: self.issue = now_issue
         else:
             self.cand = None
-        ok_stable = self.ok_since is not None and t - self.ok_since >= STABLE_S
-        hold = 0.0 if self.ok_since is None else min(1.0, (t - self.ok_since) / STABLE_S)
-        return dict(ok_stable=ok_stable, ok_now=r['ok'], issue=self.issue, checks=r['checks'], hold=hold, metrics=r['metrics'])
+        if ok_stable: self.issue = None
+        hold = min(1.0, covered * ok_share / self.OK_SHARE) if ok_share >= 0.5 else 0.0
+        return dict(ok_stable=ok_stable, ok_now=r['ok'], issue=self.issue, checks=r['checks'], hold=hold, metrics=r['metrics'],
+                    top_raw=top_raw, bad_share=round(bad / max(1, n), 2))

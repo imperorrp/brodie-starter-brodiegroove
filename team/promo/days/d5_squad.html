@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Day 5 (Fri 10/16) "Squad up. Get tagged.": Squad Battle, up to 4 dancers on one camera, colour tags, Crew Sync. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 6cqw; }
+  h1 { font-size: calc(var(--u) * 14); margin-top: calc(var(--u) * 2); }
+  h1 .outline { -webkit-text-stroke-color: var(--pink); text-shadow: 0 0 calc(var(--u) * 5) rgba(255,61,168,.35); }
+  .lede { margin-top: calc(var(--u) * 2.5); max-width: calc(var(--u) * 78); }
+  .crew { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 1.8); width: 100%; margin-top: calc(var(--u) * 5); }
+  .m { border-radius: calc(var(--u) * 2.4); background: rgba(18,18,21,.88); border: calc(var(--u) * .3) solid var(--c); padding: calc(var(--u) * 2) calc(var(--u) * 1.4); position: relative; }
+  .m .tag { font: calc(var(--u) * 2.6) var(--display); color: var(--ink); background: var(--c); padding: calc(var(--u) * .5) calc(var(--u) * 1.4); border-radius: 999px; display: inline-block; }
+  .m .fig { height: calc(var(--u) * 16); margin: calc(var(--u) * 1.8) auto calc(var(--u) * 1.2); display: block; }
+  .m b { display: block; font: calc(var(--u) * 5) / 1 var(--display); font-weight: normal; color: var(--paper); }
+  .m span { display: block; font: 600 calc(var(--u) * 1.8) var(--grotesk); color: var(--mut); margin-top: calc(var(--u) * .6); }
+  .m .mvp { position: absolute; top: calc(var(--u) * -2); right: calc(var(--u) * -1.2); transform: rotate(10deg); font: calc(var(--u) * 2.2) var(--display); background: var(--amber); color: var(--ink); padding: calc(var(--u) * .6) calc(var(--u) * 1.2); border-radius: calc(var(--u) * 1); }
+  .volt { --c: var(--volt); } .pink { --c: var(--pink); } .cyan { --c: var(--cyan); } .amber { --c: var(--amber); }
+  .sync { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 4); flex-wrap: wrap; }
+  .sync .big { font: calc(var(--u) * 7) / 1 var(--display); }
+  .titles { display: flex; gap: calc(var(--u) * 1.2); flex-wrap: wrap; justify-content: center; }
+  .foot { display: flex; align-items: center; gap: calc(var(--u) * 4); margin-top: calc(var(--u) * 4.5); }
+  .ask { font: calc(var(--u) * 3.2) / 1.15 var(--display); text-transform: uppercase; text-align: left; }
+  .bro { position: absolute; left: 3cqw; top: 3cqh; height: 16cqh; transform: rotate(-8deg); }
+
+  .s9x16 h1 { font-size: calc(var(--u) * 11.5); }
+  .s9x16 .crew { grid-template-columns: repeat(2, 1fr); }
+  .s9x16 .m .fig { height: calc(var(--u) * 11); }
+  .s9x16 .lede { font-size: calc(var(--u) * 2.8); }
+  .s9x16 .foot { flex-direction: column; gap: calc(var(--u) * 2.4); margin-top: calc(var(--u) * 3); }
+  .s9x16 .ask { text-align: center; }
+  .s9x16 .bro, .s4x5 .bro { display: none; }
+  .s9x16 .sync { margin-top: calc(var(--u) * 3); }
+
+  .s16x9 { display: grid; grid-template-columns: 1fr 1.05fr; gap: 4cqw; text-align: left; align-items: center; }
+  .s16x9 .left { display: flex; flex-direction: column; align-items: flex-start; }
+  .s16x9 .crew { margin-top: 0; }
+  .s16x9 h1 { font-size: calc(var(--u) * 11); }
+  .s16x9 .lede { font-size: calc(var(--u) * 2.8); }
+  .s16x9 .sync { margin-top: calc(var(--u) * 2.5); }
+  .s16x9 .foot { margin-top: calc(var(--u) * 3); }
+  .s16x9 .sync, .s16x9 .titles { justify-content: flex-start; }
+  .s16x9 .bro { display: none; }
+  .left { display: contents; }
+  .s16x9 .left { display: flex; }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <img class="bro sticker" src="../../../data/tmp/promo/art/point.png">
+  <div class="left">
+    <div class="eyebrow">Friday night · Squad Battle</div>
+    <h1 class="display">Squad up.<br><span class="outline">Get tagged.</span></h1>
+    <p class="lede">Up to <b>4 friends, one camera</b>. Brodie tags each of you a colour, scores everyone on every count, and crowns the MVP.</p>
+    <div class="sync" data-only="16x9"><span class="big v">94%</span><span class="pill ghost">CREW SYNC</span></div>
+    <div class="titles" data-only="16x9" style="margin-top:calc(var(--u) * 2)"><span class="pill pink">Synchronized Menaces</span><span class="pill ghost">One Carry, Rest Vibes</span></div>
+    <div class="foot" data-only="16x9"><div data-cta></div></div>
+  </div>
+  <div class="crew">
+    <div class="m volt"><span class="tag">VOLT</span><img class="fig" src="../../../data/tmp/promo/art/hype.png"><b>92</b><span>Combo Menace</span></div>
+    <div class="m pink"><i class="mvp">MVP</i><span class="tag">PINK</span><img class="fig" src="../../web/groove/assets/brodie-flex.png"><b>97</b><span>Main Character</span></div>
+    <div class="m cyan"><span class="tag">CYAN</span><img class="fig" src="../../../data/tmp/promo/art/chill.png"><b>81</b><span>Clean Lines Club</span></div>
+    <div class="m amber"><span class="tag">AMBER</span><img class="fig" src="../../../data/tmp/promo/art/judge.png"><b>64</b><span>Certified Off-Beat (for now)</span></div>
+  </div>
+  <div class="sync" data-only="4x5 9x16"><span class="big v">94%</span><span class="pill ghost">CREW SYNC</span><span class="pill pink">Synchronized Menaces</span></div>
+  <div class="foot" data-only="4x5 9x16"><div class="ask">Tag the friend who's<br><span class="am">the carry.</span></div><div data-cta></div></div>
+</div>
+<script src="../config.js"></script><script src="../promo.js"></script>
+</body></html>

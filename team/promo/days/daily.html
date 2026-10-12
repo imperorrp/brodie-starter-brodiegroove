@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- Recurring 9:16 story, days 1-7: "Today's 8-count". slide=N is the day; the style comes from config.json daily_style. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .day { font: 700 calc(var(--u) * 2.4) var(--grotesk); letter-spacing: .24em; color: var(--mut); text-transform: uppercase; }
+  .day b { color: var(--volt); }
+  h1 { font-size: calc(var(--u) * 9.5); margin-top: calc(var(--u) * 3); line-height: .95; }
+  .style { font-size: calc(var(--u) * 12); margin-top: calc(var(--u) * 1.5); white-space: nowrap; }
+  .counts { display: flex; gap: calc(var(--u) * 1); margin-top: calc(var(--u) * 5); }
+  .counts i { width: calc(var(--u) * 6.4); height: calc(var(--u) * 6.4); border-radius: calc(var(--u) * 1.2); display: grid; place-items: center; font: normal calc(var(--u) * 2.8) var(--grotesk); font-weight: 700; background: var(--volt); color: var(--ink); }
+  .counts i.cy { background: var(--cyan); } .counts i.off { background: var(--ink3); color: var(--mut); border: 1px solid var(--line); }
+  .bro { height: calc(var(--u) * 40); margin-top: calc(var(--u) * 5); transform: rotate(-4deg); }
+  .lede { margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 2.9); max-width: calc(var(--u) * 70); }
+  .foot { margin-top: calc(var(--u) * 4); }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <div class="day">Daily challenge · <b>Day <span data-slide="1">1</span><span data-slide="2">2</span><span data-slide="3">3</span><span data-slide="4">4</span><span data-slide="5">5</span><span data-slide="6">6</span><span data-slide="7">7</span></b> / 7</div>
+  <h1 class="display">Today's<br><span class="outline">8-count</span></h1>
+  <div class="display style v" data-p="daily_style.{slide}">Hip-hop</div>
+  <div class="counts"><i>1</i><i>2</i><i class="cy">3</i><i>4</i><i>5</i><i class="off">6</i><i class="off">7</i><i class="off">8</i></div>
+  <img class="bro sticker" data-slide="1" src="../../web/groove/assets/brodie-flex.png">
+  <img class="bro sticker" data-slide="2" src="../../../data/tmp/promo/art/hype.png">
+  <img class="bro sticker" data-slide="3" src="../../../data/tmp/promo/art/judge.png">
+  <img class="bro sticker" data-slide="4" src="../../../data/tmp/promo/art/chill.png">
+  <img class="bro sticker" data-slide="5" src="../../../data/tmp/promo/art/point.png">
+  <img class="bro sticker" data-slide="6" src="../../../data/tmp/promo/art/coach.png">
+  <img class="bro sticker" data-slide="7" src="../../../data/tmp/promo/art/phone.png">
+  <p class="lede">Same routine for everyone today. Call Brodie, say <b>"daily challenge"</b>, and get on the board.</p>
+  <div class="foot"><div data-cta></div></div>
+</div>
+<script src="../config.js"></script><script src="../promo.js"></script>
+</body></html>

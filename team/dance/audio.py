@@ -95,7 +95,7 @@ class FakeBank:
 
 # ---- sound effects (synthesized; played after the phrase track or to cut it) ----
 SFX = dict(levelup='[dance:sfx:levelup]', stamp='[dance:sfx:stamp]', ko='[dance:sfx:ko]', combo='[dance:sfx:combo]',
-           pause='[dance:sfx:pause]', achievement='[dance:sfx:achievement]', mvp='[dance:sfx:mvp]')
+           pause='[dance:sfx:pause]', achievement='[dance:sfx:achievement]', mvp='[dance:sfx:mvp]', tick='[dance:sfx:tick]')
 
 
 def _note(freq, ms, amp=0.4, decay=8.0, harm=0.3):
@@ -142,6 +142,7 @@ def sfx_pause():                                     # soft two notes down; also
 
 def register_sfx(bank):
     """Register every sound effect in the bank; returns {name: cue text}."""
-    gens = dict(levelup=sfx_levelup, stamp=sfx_stamp, ko=sfx_ko, combo=sfx_combo, pause=sfx_pause, achievement=sfx_achievement, mvp=sfx_levelup)
+    gens = dict(levelup=sfx_levelup, stamp=sfx_stamp, ko=sfx_ko, combo=sfx_combo, pause=sfx_pause, achievement=sfx_achievement, mvp=sfx_levelup,
+                tick=lambda: click(1400.0, 35, 0.2))                 # pose by pose: a soft tick on each new pose
     for name, fn in gens.items(): register_clip(bank, SFX[name], fn())
     return dict(SFX)

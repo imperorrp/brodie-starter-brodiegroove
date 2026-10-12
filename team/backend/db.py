@@ -33,11 +33,29 @@ def init():
 import random, time as _time
 
 
+CODE_TABLES = ('dance_results', 'dance_chains', 'dance_classes')
+
+
 def _new_code(c, table):
-    for _ in range(50):
+    """A four-digit code free in every code table: a spoken code then means exactly one thing (a battle, a telephone chain or a
+    class). `table` is kept for the callers' readability."""
+    for _ in range(200):
         code = f'{random.randint(1000, 9999)}'
-        if c.execute(f'SELECT 1 FROM {table} WHERE code = ?', (code,)).fetchone() is None: return code
+        if all(c.execute(f'SELECT 1 FROM {t} WHERE code = ?', (code,)).fetchone() is None for t in CODE_TABLES): return code
     raise RuntimeError('no free code')
+
+
+def resolve_code(code):
+    """What a spoken four-digit code is: {'code', 'kinds': [...]} with each match ('battle' with the result's name and score,
+    'telephone' with the number of links, 'class' with the teacher). Old codes made before codes were unique can match twice."""
+    code = str(code); kinds = []
+    r = get_result(code)
+    if r: kinds.append(dict(kind='battle', name=r.get('name'), score100=r.get('score100') if r.get('score100') is not None else r.get('total'), key=r.get('key'), mode=r.get('mode')))
+    ch = get_chain(code)
+    if ch: kinds.append(dict(kind='telephone', links=len(ch.get('links') or []), key=ch.get('key')))
+    cl = get_class(code, with_key=False)
+    if cl: kinds.append(dict(kind='class', teacher=cl.get('teacher'), n_students=len(cl.get('students') or [])))
+    return dict(code=code, kinds=kinds)
 
 
 def add_result(name, key, mode, total, rounds, score100=None, challenge=None):
@@ -70,11 +88,24 @@ def history(name, limit=10):
     return out
 
 
-def leaderboard(key=None, limit=20):
+def leaderboard(key=None, limit=20, mode=None, since=None):
+    """Results by score, best first. mode / since (epoch seconds) filter it: the daily board is mode='daily' since local midnight."""
+    q = 'SELECT code, name, key, mode, total, score100, created FROM dance_results WHERE 1=1'; args = []
+    if key: q += ' AND key = ?'; args.append(key)
+    if mode: q += ' AND mode = ?'; args.append(mode)
+    if since is not None: q += ' AND created >= ?'; args.append(float(since))
+    q += ' ORDER BY COALESCE(score100, total) DESC LIMIT ?'; args.append(int(limit))
     with _lock, _conn() as c:
-        if key: rows = c.execute('SELECT code, name, key, mode, total, created FROM dance_results WHERE key = ? ORDER BY total DESC LIMIT ?', (key, int(limit))).fetchall()
-        else: rows = c.execute('SELECT code, name, key, mode, total, created FROM dance_results ORDER BY total DESC LIMIT ?', (int(limit),)).fetchall()
+        rows = c.execute(q, args).fetchall()
     return [dict(r) for r in rows]
+
+
+def daily_played(name, key):
+    """True when this (named) caller already had today's daily shot on this routine."""
+    if not name: return False
+    with _lock, _conn() as c:
+        r = c.execute("SELECT 1 FROM dance_results WHERE lower(name) = lower(?) AND key = ? AND mode = 'daily' LIMIT 1", (name, key)).fetchone()
+    return r is not None
 
 
 def start_chain(key, link):

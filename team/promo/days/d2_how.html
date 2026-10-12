@@ -1,0 +1,104 @@
+<!doctype html>
+<!-- Day 2 (Tue 10/13) how it works. 4:5 = 5-slide carousel (cover, 4 steps on real HUD screenshots, CTA on the last);
+     9:16 and 16:9 = one poster with the four steps side by side. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .cover { margin-top: -14cqh; }
+  .cover h1 { font-size: calc(var(--u) * 11); line-height: .92; }
+  .cover h1 span { display: block; }
+  .cover .eyebrow { justify-content: center; margin-bottom: calc(var(--u) * 4); }
+  .cover .swipe { margin-top: calc(var(--u) * 5); }
+  .bro { position: absolute; right: 6cqw; bottom: 4cqh; height: 26cqh; transform: rotate(6deg); }
+
+  .step { display: grid; grid-template-columns: 1fr calc(var(--u) * 40); gap: calc(var(--u) * 5); align-items: center; text-align: left; padding: 0 6cqw; width: 100%; }
+  .step .n { font-size: calc(var(--u) * 20); }
+  .step h2 { font-size: calc(var(--u) * 8); white-space: nowrap; margin: calc(var(--u) * 1) 0 calc(var(--u) * 3); }
+  .step .lede { font-size: calc(var(--u) * 3.2); }
+  .step .shot { aspect-ratio: 9 / 16; transform: rotate(2.5deg); }
+  .step .chip { position: absolute; z-index: 3; }
+  .step .pg { position: absolute; top: 4.5cqh; left: 6cqw; right: 6cqw; display: flex; justify-content: space-between; align-items: center; }
+  .dots { display: flex; gap: calc(var(--u) * 1); }
+  .dots i { width: calc(var(--u) * 1.2); height: calc(var(--u) * 1.2); border-radius: 50%; background: var(--line); }
+  .dots i.on { background: var(--volt); width: calc(var(--u) * 3.6); border-radius: 999px; }
+  .step .ctaw { margin-top: calc(var(--u) * 4); }
+
+  .row4 { display: flex; gap: calc(var(--u) * 2.6); align-items: flex-start; justify-content: center; margin-top: calc(var(--u) * 5); }
+  .row4 .it { width: calc(var(--u) * 26); display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 1.6); }
+  .row4 .shot { width: 100%; aspect-ratio: 9 / 16; border-radius: calc(var(--u) * 2.4); }
+  .row4 .it:nth-child(odd) .shot { transform: rotate(-2deg); } .row4 .it:nth-child(even) .shot { transform: rotate(2deg) translateY(calc(var(--u) * 2)); }
+  .row4 .lab { font: calc(var(--u) * 3.2) var(--display); text-transform: uppercase; }
+  .row4 .lab i { font-style: normal; display: block; font: 700 calc(var(--u) * 1.8) var(--grotesk); letter-spacing: .2em; color: var(--mut); }
+  .sum h1 { font-size: calc(var(--u) * 8); line-height: .95; }
+  .sum .ctaw { margin-top: calc(var(--u) * 5); }
+  .s9x16 .row4 { flex-wrap: wrap; width: calc(var(--u) * 70); gap: calc(var(--u) * 3) calc(var(--u) * 5); }
+  .s9x16 .row4 .it { width: calc(var(--u) * 28); }
+  .s9x16 .row4 .shot { aspect-ratio: 9 / 13; }
+  .s9x16 .sum h1 { font-size: calc(var(--u) * 7.4); }
+  .s16x9 .sum { display: grid; grid-template-columns: auto auto; gap: 5cqw; align-items: center; text-align: left; }
+  .s16x9 .sum .row4 { margin: 0; }
+  .s16x9 .sum h1 { font-size: calc(var(--u) * 9.5); }
+  .s16x9 .row4 .it { width: calc(var(--u) * 24); }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+
+  <!-- slide 1: cover -->
+  <div class="cover" data-slide="1" data-only="4x5">
+    <div class="eyebrow">How BrodieGroove works</div>
+    <h1 class="display"><span>Watch it.</span><span class="cy">Count in.</span><span class="v">Dance it.</span><span class="pk">Get scored.</span></h1>
+    <div class="swipe pill ghost">Swipe → 4 steps, one call</div>
+  </div>
+  <img class="bro sticker" data-slide="1" data-only="4x5" src="../../../data/tmp/promo/art/point.png">
+
+  <!-- slides 2-5: the four steps -->
+  <div class="step" data-slide="2" data-only="4x5">
+    <div><div class="display n outline">01</div><h2 class="display cy">Watch it.</h2>
+      <p class="lede">Brodie's <b>ghost</b> shows the move at half speed, one small piece at a time, with the counts spelled out.</p></div>
+    <div style="position:relative"><div class="shot"><img src="../../../data/tmp/hud/06_watch.png"></div>
+      <div class="chip" style="left:-22%;top:12%"><i class="dot" style="background:var(--cyan)"></i>0.5× DEMO</div></div>
+  </div>
+  <div class="step" data-slide="3" data-only="4x5">
+    <div><div class="display n outline">02</div><h2 class="display">Count in.</h2>
+      <p class="lede"><b>5, 6, 7, 8.</b> The beat plays right through your FaceTime call. No app, no setup: just your phone or laptop.</p></div>
+    <div style="position:relative"><div class="shot"><img src="../../../data/tmp/hud/07_countin.png"></div>
+      <div class="chip" style="left:-18%;top:62%"><span class="big v">5·6·7·8</span></div></div>
+  </div>
+  <div class="step" data-slide="4" data-only="4x5">
+    <div><div class="display n outline">03</div><h2 class="display v">Dance it.</h2>
+      <p class="lede">The ghost moves <b>one beat ahead</b> of you, so you always know what's next. Say <b>"slower"</b> any time.</p></div>
+    <div style="position:relative"><div class="shot"><img src="../../../data/tmp/hud/10_challenge_fire.png"></div>
+      <div class="chip" style="left:-24%;top:20%"><span class="big pk">×5</span> COMBO</div></div>
+  </div>
+  <div class="step" data-slide="5" data-only="4x5">
+    <div><div class="display n outline">04</div><h2 class="display pk">Get scored.</h2>
+      <p class="lede">Every count lands <b class="v">PERFECT</b>, <b class="cy">NICE</b> or <b class="rd">MISS</b>. Then <b>one tip</b>, and Brodie slows down the part you missed.</p>
+      <div class="ctaw"><div data-cta></div></div></div>
+    <div style="position:relative"><div class="shot"><img src="../../../data/tmp/hud/16_recap.png"></div>
+      <div class="chip" style="left:-20%;top:70%"><span class="big v">A</span> 87 / 100</div></div>
+  </div>
+  <div class="pg tagline" data-only="4x5" style="position:absolute;top:4.5cqh;left:6cqw;right:6cqw;display:flex;justify-content:space-between;align-items:center">
+    <span>BRODIE<span class="v">GROOVE</span></span>
+    <span class="dots"><i data-slide="1" class="on"></i><i data-slide="1"></i><i data-slide="1"></i><i data-slide="1"></i><i data-slide="1"></i>
+      <i data-slide="2"></i><i data-slide="2" class="on"></i><i data-slide="2"></i><i data-slide="2"></i><i data-slide="2"></i>
+      <i data-slide="3"></i><i data-slide="3"></i><i data-slide="3" class="on"></i><i data-slide="3"></i><i data-slide="3"></i>
+      <i data-slide="4"></i><i data-slide="4"></i><i data-slide="4"></i><i data-slide="4" class="on"></i><i data-slide="4"></i>
+      <i data-slide="5"></i><i data-slide="5"></i><i data-slide="5"></i><i data-slide="5"></i><i data-slide="5" class="on"></i></span>
+  </div>
+
+  <!-- 9:16 / 16:9: one summary poster -->
+  <div class="sum" data-only="9x16 16x9">
+    <div><div class="eyebrow" style="justify-content:inherit">How it works</div>
+      <h1 class="display" style="margin-top:calc(var(--u) * 2.5)">Watch it.<br><span class="cy">Count in.</span><br><span class="v">Dance it.</span><br><span class="pk">Get scored.</span></h1>
+      <div class="ctaw" data-only="16x9"><div data-cta></div></div></div>
+    <div class="row4">
+      <div class="it"><div class="shot"><img src="../../../data/tmp/hud/06_watch.png"></div><div class="lab cy"><i>01</i>Watch</div></div>
+      <div class="it"><div class="shot"><img src="../../../data/tmp/hud/07_countin.png"></div><div class="lab"><i>02</i>Count in</div></div>
+      <div class="it"><div class="shot"><img src="../../../data/tmp/hud/10_challenge_fire.png"></div><div class="lab v"><i>03</i>Dance</div></div>
+      <div class="it"><div class="shot"><img src="../../../data/tmp/hud/16_recap.png"></div><div class="lab pk"><i>04</i>Scored</div></div>
+    </div>
+    <div class="ctaw" data-only="9x16"><div data-cta></div></div>
+  </div>
+</div>
+<script src="../config.js"></script><script src="../promo.js"></script>
+</body></html>

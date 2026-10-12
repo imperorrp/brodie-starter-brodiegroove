@@ -173,5 +173,14 @@ def with_half(key, section, half):
     return k, len(ph) - 1
 
 
+def with_counts(key, section, first, last):
+    """A shallow copy of `key` with one more phrase entry: counts first..last (0-based, inclusive) of section `section`, at least two
+    counts (looping the weak bar). Returns (key, index)."""
+    k = dict(key); ph = list(key['phrases']); p = ph[max(0, min(int(section), len(ph) - 1))]
+    a = max(0, min(int(first), p['beats'] - 2)); b = max(a + 1, min(int(last), p['beats'] - 1))
+    ph.append(dict(start_beat=p['start_beat'] + a, beats=b - a + 1, loop=(a, b))); k['phrases'] = ph
+    return k, len(ph) - 1
+
+
 def routine_seconds(key, tempo=1.0):
     return sum(p['beats'] for p in key['phrases'] if not p.get('combined') and 'half' not in p) * 60.0 / (float(key['bpm']) * float(tempo))

@@ -80,11 +80,9 @@ def structured_cue(result, count_label='counts'):
         return dict(base, text='Step back so I can see all of you', short='STEP BACK', kind='visibility', group=None, beats=[], error_type='visibility', confidence=1.0)
     weak = list(r.get('weak_beats') or [])
     longest = max(_runs(weak), key=len) if weak else []
-    if (r.get('timing') if r.get('timing') is not None else 1.0) < 0.6 and r.get('mean_offset_beats') is not None:
-        late = r['mean_offset_beats'] > 0; span = f' on {_span(longest, count_label)}' if longest else ''
-        text = (f"You're a little late{span}, hit it on the click" if late else f"You're early{span}, wait for the click")
-        return dict(base, text=text, short='LATE: ON THE CLICK' if late else 'EARLY: WAIT FOR IT', kind='timing', group=None, beats=longest or weak,
-                    error_type='late' if late else 'early', direction='earlier' if late else 'later', confidence=min(1.0, abs(r['mean_offset_beats']) * 2))
+    if (r.get('timing') if r.get('timing') is not None else 1.0) < 0.6:
+        t = timing_cue(r)                                                  # only counts whose shape was right (no false "you're early")
+        if t: return dict(base, **{k: v for k, v in t.items() if k != 'sev'}, group=None, confidence=round(float(t['sev']), 2))
     if r.get('score', 0) >= 85 or not weak:
         return dict(base, text='Clean, that is locked in', short='LOCKED IN', kind='praise', group=None, beats=[], error_type=None, confidence=1.0)
     cs = r.get('channel_signed')
@@ -149,3 +147,161 @@ def describe_phrase(key, i, per=2):
             what = f'{_SIDED[ch]} {verb}' if ch in _SIDED else verb
         out.append(f'{span}: {what}')
     return '; '.join(out)
+
+
+# ---- richer coaching: depth / facing, timing per count, size, up to three ranked corrections, progress ----
+DEPTH_DEADBAND = 35.0                   # degrees out of the frontal plane before a forward/back cue (MediaPipe z is noisy)
+FACING_DEADBAND = 30.0
+
+
+def ref_profile(key, pi):
+    """Per count of a reference phrase, from its 2D skeleton (what the caller sees as the ghost): how flat each arm is in the picture
+    plane (projected length / the arm's longest projection in the phrase), where it points, and how turned the shoulders look."""
+    from .reference import phrase_slice
+    from .features import arm_planarity, arm_direction_2d, L_SH, R_SH
+    _, _, _, S = phrase_slice(key, pi); pb = int(key['per_beat']); n = max(1, len(S) // pb)
+    if not len(S): return []
+    lmax = {s: max(1e-3, max(arm_planarity(x, s) for x in S)) for s in ('l', 'r')}
+    sw = [float(np.linalg.norm(x[L_SH] - x[R_SH])) for x in S]; swmax = max(1e-3, max(sw))
+    out = []
+    for b in range(n):
+        x = S[min(len(S) - 1, b * pb)]
+        out.append(dict(flat_l=arm_planarity(x, 'l') / lmax['l'], flat_r=arm_planarity(x, 'r') / lmax['r'],
+                        dir_l=arm_direction_2d(x, 'l'), dir_r=arm_direction_2d(x, 'r'), facing=sw[min(len(sw) - 1, b * pb)] / swmax))
+    return out
+
+
+def depth_issue(sig, prof, side):
+    """A forward/back issue for one arm on one count, or None. Only when the reference is clearly in the plane (flat) or clearly
+    foreshortened, and the live arm clearly disagrees by more than the deadband."""
+    a = (sig or {}).get(f'arm_fwd_{side}')
+    if a is None: return None
+    flat = prof.get(f'flat_{side}', 1.0); d = prof.get(f'dir_{side}', 'out'); name = SIDE[side]
+    if flat >= 0.85 and abs(a) > DEPTH_DEADBAND:
+        where = {'up': 'straight up', 'down': 'down by your side', 'across': 'across your body'}.get(d, 'out to the side')
+        fwd = a > 0
+        return dict(kind='depth', body_part=f'{name} arm', side=side, sev=abs(a) / 90.0,
+                    text=f"Your {name} arm is reaching {'forward' if fwd else 'back'}; take it {where}",
+                    short=f"{name.upper()} ARM {'OUT' if d == 'out' else d.upper()}", direction='side')
+    if flat <= 0.55 and abs(a) < 15.0:
+        return dict(kind='depth', body_part=f'{name} arm', side=side, sev=0.5,
+                    text=f"Bring your {name} arm forward, out in front of you", short=f"{name.upper()} ARM FORWARD", direction='forward')
+    return None
+
+
+def _runs_of(flags):
+    """[(start, end)] runs of consecutive True."""
+    runs = []; start = None
+    for i, f in enumerate(list(flags) + [False]):
+        if f and start is None: start = i
+        if not f and start is not None: runs.append((start, i - 1)); start = None
+    return runs
+
+
+def depth_cues(result, key, pi):
+    """Depth and facing cues from the per-count 3D signals (engine result['body3d']) against the reference profile. A cue covers a run
+    of at least two counts (jitter on a single count never makes one)."""
+    b3 = (result or {}).get('body3d')
+    if not b3: return []
+    try: prof = ref_profile(key, pi)
+    except Exception: return []
+    n = min(len(b3), len(prof)); out = []
+    for side in ('l', 'r'):
+        issues = [(depth_issue(b3[b], prof[b], side) if b3[b] else None) for b in range(n)]
+        for s0, s1 in _runs_of([i is not None for i in issues]):
+            if s1 - s0 + 1 < 2 and n > 2: continue
+            best = max((issues[b] for b in range(s0, s1 + 1)), key=lambda i: i['sev'])
+            beats = list(range(s0, s1 + 1))
+            out.append(dict(best, beats=beats, text=f"{best['text']} on {_span(beats)}", error_type='depth'))
+    flags = []
+    for b in range(n):
+        y = (b3[b] or {}).get('facing_yaw'); f = prof[b].get('facing', 1.0)
+        flags.append(None if y is None else ('front' if f >= 0.9 and abs(y) > FACING_DEADBAND else 'turn' if f <= 0.65 and abs(y) < 15.0 else None))
+    for want in ('front', 'turn'):
+        for s0, s1 in _runs_of([x == want for x in flags]):
+            if s1 - s0 + 1 < 2 and n > 2: continue
+            beats = list(range(s0, s1 + 1)); y = float(np.median([b3[b].get('facing_yaw') or 0.0 for b in beats]))
+            if want == 'front':
+                txt = f"You're turned to your {'left' if y > 0 else 'right'}; face the front on {_span(beats)}"; short = 'FACE FRONT'
+            else:
+                txt = f"Turn your body to the side on {_span(beats)}, like the ghost"; short = 'TURN TO THE SIDE'
+            out.append(dict(kind='depth', body_part='body', text=txt, short=short, beats=beats, sev=0.7, error_type='facing', direction=want))
+    return out
+
+
+def timing_cue(result):
+    """Late / early on the counts where the shape was roughly right (an offset on a wrong shape is a shape problem, not timing)."""
+    from .scoring import AMBER_DEG
+    rows = [r for r in (result or {}).get('per_beat') or [] if r.get('offset_beats') is not None and (r.get('error_deg') if r.get('error_deg') is not None else 99) < AMBER_DEG]
+    late = [r['beat'] for r in rows if r['offset_beats'] > 0.25]; early = [r['beat'] for r in rows if r['offset_beats'] < -0.25]
+    if len(late) < 2 and len(early) < 2: return None
+    is_late = len(late) >= len(early); beats = late if is_late else early
+    run = max(_runs(beats), key=len)
+    amount = float(np.median([abs(r['offset_beats']) for r in rows if r['beat'] in beats]))
+    how = 'half a count' if amount < 0.7 else 'a full count'
+    text = (f"You're {how} late on {_span(run)}: hit it on the click" if is_late else f"You're rushing {_span(run)}, about {how} early: wait for the click")
+    return dict(kind='timing', body_part=None, text=text, short='LATE: ON THE CLICK' if is_late else 'EARLY: WAIT FOR IT', beats=run, sev=min(1.0, amount),
+                error_type='late' if is_late else 'early', direction='earlier' if is_late else 'later')
+
+
+def size_cue(result):
+    """Too small (marking it) or too big, from the range of motion and hip energy against the reference."""
+    sz = (result or {}).get('size') or {}
+    a = sz.get('arms'); e = sz.get('energy'); h = sz.get('hips')
+    if a is not None and a < 0.6:
+        frac = 'half' if a > 0.35 else 'a third'
+        return dict(kind='size', body_part='arms', text=f"Your arm moves are about {frac} the size of mine: go bigger, full reach", short='BIGGER ARMS', beats=[], sev=1.0 - a)
+    if e is not None and e < 0.5:
+        return dict(kind='size', body_part='legs', text="More bounce: bend your knees and move from the hips", short='MORE BOUNCE', beats=[], sev=1.0 - e)
+    if h is not None and h < 0.5:
+        return dict(kind='size', body_part='hips', text="Sink lower into your hips on the moves", short='SINK LOWER', beats=[], sev=1.0 - h)
+    if a is not None and a > 1.8:
+        return dict(kind='size', body_part='arms', text="Smaller and sharper with the arms: control it", short='SHARPER ARMS', beats=[], sev=0.4)
+    return None
+
+
+def layered_cues(result, key=None, pi=0, arms_only=False, limit=3):
+    """Up to `limit` corrections for one try, most important first, one per body part: the shape cue (structured_cue), depth and facing,
+    timing on the counts where the shape was right, and size. Each has kind, body_part, text, short, beats. Not scored -> the
+    visibility cue alone; nothing to fix -> the praise cue alone."""
+    base = structured_cue(result)
+    if base.get('kind') == 'visibility': return [base]
+    cands = []
+    shape = base if base.get('kind') == 'correction' else structured_cue(dict(result, timing=1.0))   # the shape cue even when timing led
+    if shape.get('kind') == 'correction': cands.append(dict(shape, sev=0.6 + float(shape.get('confidence') or 0.4)))
+    if key is not None:
+        try: cands += depth_cues(result, key, pi)
+        except Exception: pass
+    t = timing_cue(result)
+    if t: cands.append(dict(t, sev=0.5 + t['sev'] * 0.5))
+    z = size_cue(result)
+    if z: cands.append(dict(z, sev=0.4 + z['sev'] * 0.4))
+    if arms_only:
+        cands = [c for c in cands if c.get('kind') == 'timing' or 'arm' in str(c.get('body_part') or '') or c.get('body_part') in ('arms', 'hands')]
+    out = []; parts = set()
+    for c in sorted(cands, key=lambda c: -c.get('sev', 0)):
+        bp = c.get('body_part') or c.get('kind')
+        if bp in parts: continue
+        parts.add(bp); out.append(c)
+        if len(out) >= limit: break
+    return out or [base]
+
+
+def progress_note(prev_result, result, prev_cue):
+    """A short note on whether the last correction landed ("Your left arm is way better."), or None. Compares the cued channel's mean
+    error on its counts between the two tries."""
+    if not prev_result or not result or not prev_cue or prev_cue.get('kind') != 'correction': return None
+    ch_name = prev_cue.get('channel'); beats = prev_cue.get('beats') or []
+    if not ch_name or ch_name not in CHANNELS or not beats: return None
+    ch = CHANNELS.index(ch_name)
+
+    def err(r):
+        cs = r.get('channel_signed') or []
+        vals = [abs(cs[b][ch]) for b in beats if b < len(cs) and cs[b] is not None and cs[b][ch] is not None]
+        return float(np.mean(vals)) if vals else None
+    a, b = err(prev_result), err(result)
+    if a is None or b is None or a < 12: return None
+    part = prev_cue.get('body_part') or 'that'
+    if b <= 0.6 * a: return f"Your {part} is way better."
+    if b >= 0.95 * a: return None
+    return f"Your {part} is getting there."

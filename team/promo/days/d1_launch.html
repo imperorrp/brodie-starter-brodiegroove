@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Day 1 (Mon 10/12) launch hero: the landing page's hero as a poster, with the call line + QR. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 5.5cqh; }
+  .title { font-size: calc(var(--u) * 14.5); margin-top: calc(var(--u) * 3); }
+  .title .row { display: block; white-space: nowrap; }
+  .title .row + .row { margin-top: calc(var(--u) * .6); }
+  .title .on { color: var(--volt); -webkit-text-stroke: 0; }
+  .stage { position: relative; width: calc(var(--u) * 42); aspect-ratio: 1; margin-top: calc(var(--u) * 2); flex: none; }
+  .stage .disc { inset: 6%; }
+  .stage .bro { position: absolute; left: 50%; bottom: 8%; height: 88%; transform: translateX(-50%) rotate(-3deg); }
+  .stage .chip { position: absolute; }
+  .stage .c1 { left: -18%; top: 22%; transform: rotate(-6deg); }
+  .stage .c2 { right: -20%; top: 40%; transform: rotate(5deg); }
+  .stage .c3 { left: -10%; bottom: 10%; transform: rotate(3deg); }
+  .lede { max-width: calc(var(--u) * 80); margin-top: calc(var(--u) * 1.5); }
+  .ctawrap { margin-top: calc(var(--u) * 2.6); display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 1.6); }
+  .marquee { bottom: 2.5cqh; }
+  .s4x5 .m2 { display: none; }
+  .s4x5 .marquee { bottom: 1.2cqh; }
+
+  .s9x16 { padding-top: 12.5cqh; }
+  .s9x16 .title { font-size: calc(var(--u) * 15); }
+  .s9x16 .stage { width: calc(var(--u) * 44); margin-top: calc(var(--u) * 4); }
+  .s9x16 .lede { margin-top: calc(var(--u) * 3); }
+  .s9x16 .ctawrap { margin-top: calc(var(--u) * 3.5); }
+  .s9x16 .marquee { bottom: 9cqh; }
+  .s9x16 .m2 { display: none; }
+  .s4x5 .tagline { display: none; }
+  .s9x16 .lede { font-size: calc(var(--u) * 3.1); }
+  .s9x16 .m2 { display: none; }
+
+  .s16x9 { flex-direction: row; align-items: center; justify-content: center; gap: 4cqw; text-align: left; padding: 0 0 7cqh; }
+  .s16x9 .copy { display: flex; flex-direction: column; align-items: flex-start; }
+  .s16x9 .title { font-size: calc(var(--u) * 19); }
+  .s16x9 .stage { width: calc(var(--u) * 72); order: 2; margin: 0; }
+  .s16x9 .lede { max-width: calc(var(--u) * 82); }
+  .s16x9 .ctawrap { align-items: flex-start; }
+  .s16x9 .marquee { bottom: 3cqh; transform: rotate(-1.4deg); }
+  .s16x9 .m2 { display: none; }
+  .copy { display: contents; }
+  .s16x9 .copy { display: flex; }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <div class="copy">
+    <div class="kicker"><span>LIVE</span>A dance coach you FaceTime</div>
+    <h1 class="display title"><span class="row">BRODIE</span><span class="row outline"><span class="on">GRO</span>OVE</span></h1>
+    <p class="lede" data-only="16x9">Call Brodie and dance. A ghost shows the move <b>one beat ahead</b>, every count gets scored <b class="v">PERFECT</b>, <b class="cy">NICE</b> or <b class="rd">MISS</b>, and you get one tip at a time.</p>
+    <div class="ctawrap" data-only="16x9"><div data-cta></div><div class="tagline">It feels like a rhythm game, not a class.</div></div>
+  </div>
+  <div class="stage">
+    <div class="disc"></div>
+    <img class="bro sticker" src="../../web/groove/assets/brodie-flex.png">
+    <div class="chip c1"><i class="dot" style="background:var(--volt)"></i><span class="big v">PERFECT</span></div>
+    <div class="chip c2"><span class="big pk">×11</span> COMBO</div>
+    <div class="chip c3"><i class="dot" style="background:var(--cyan)"></i>GHOST · ONE BEAT AHEAD</div>
+  </div>
+  <p class="lede" data-only="4x5 9x16">Call Brodie and dance. A ghost shows the move <b>one beat ahead</b>, every count gets scored, and you get <b>one tip at a time</b>.</p>
+  <div class="ctawrap" data-only="4x5 9x16"><div data-cta></div><div class="tagline">It feels like a rhythm game, not a class.</div></div>
+  <div class="marquee ink m2" style="bottom:7cqh"><span>GHOST ONE BEAT AHEAD</span><span>PERFECT</span><span>COMBO</span><span>XP &amp; LEVELS</span><span>SQUAD BATTLE</span><span>S-RANK</span><span>GHOST ONE BEAT AHEAD</span></div>
+  <div class="marquee"><span>HIP-HOP</span><span>K-POP</span><span>POP CHOREO</span><span>HOUSE</span><span>DANCE CARDIO</span><span>WAACK</span><span>KRUMP</span><span>STREET JAZZ</span><span>LOCK</span></div>
+</div>
+<script src="../config.js"></script><script src="../promo.js"></script>
+</body></html>

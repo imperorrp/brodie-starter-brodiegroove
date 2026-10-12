@@ -26,7 +26,7 @@ W, H = 720, 1280                      # the portrait canvas (phones); landscape 
 # BGR palette: volt #D9FF3D, pink #FF3DA8, cyan #3DE0FF, amber #FFB13D, red #FF4D5E, ink #0A0A0B, paper #F4F4F0
 VOLT, PINK, CYAN, AMBER, RED = (61, 255, 217), (168, 61, 255), (255, 224, 61), (61, 177, 255), (94, 77, 255)
 INK, PAPER, MUTE = (11, 10, 10), (240, 244, 244), (164, 157, 154)
-BGR = dict(volt=VOLT, ghost=(255, 200, 120), green=VOLT, amber=AMBER, red=RED, gray=(90, 90, 90), white=(245, 245, 245), black=(0, 0, 0),
+BGR = dict(volt=VOLT, ghost=CYAN, green=VOLT, amber=AMBER, red=RED, gray=(90, 90, 90), white=(245, 245, 245), black=(0, 0, 0),
            dim=(30, 30, 30), panel=(20, 18, 18), mute=MUTE, pink=PINK, cyan=CYAN, ink=INK, paper=PAPER)
 PLAYER = dict(volt=VOLT, pink=PINK, cyan=CYAN, amber=AMBER)
 GRADE_COL = dict(S=VOLT, A=CYAN, B=PAPER, C=AMBER, D=RED)
@@ -120,6 +120,16 @@ def rounded_rect(img, p0, p1, color, r=14, alpha=1.0):
     return img
 
 
+def rounded_outline(img, p0, p1, color, r=14, thick=2):
+    """The outline of a rounded rectangle (card and tile borders)."""
+    x0, y0 = int(p0[0]), int(p0[1]); x1, y1 = int(p1[0]), int(p1[1]); r = max(1, min(int(r), (x1 - x0) // 2, (y1 - y0) // 2))
+    for a, b in (((x0 + r, y0), (x1 - r, y0)), ((x0 + r, y1), (x1 - r, y1)), ((x0, y0 + r), (x0, y1 - r)), ((x1, y0 + r), (x1, y1 - r))):
+        cv2.line(img, a, b, color, thick, cv2.LINE_AA)
+    for (cx, cy), ang in (((x0 + r, y0 + r), 180), ((x1 - r, y0 + r), 270), ((x1 - r, y1 - r), 0), ((x0 + r, y1 - r), 90)):
+        cv2.ellipse(img, (cx, cy), (r, r), ang, 0, 90, color, thick, cv2.LINE_AA)
+    return img
+
+
 def plate(img, x0, y0, x1, y1, color=INK, alpha=0.72, r=18):
     return rounded_rect(img, (x0, y0), (x1, y1), color, r=r, alpha=alpha)
 
@@ -149,25 +159,61 @@ def _roi_box(pts, pad, size):
     return x0, y0, x1, y1
 
 
-def draw_skeleton(img, pts, vis=None, color=BGR['volt'], thickness=3, dots=True, alpha=1.0, outline=True):
-    if alpha < 1.0:
-        x0, y0, x1, y1 = _roi_box(pts, thickness * 3 + 6, (img.shape[1], img.shape[0]))
-        if x1 <= x0 or y1 <= y0: return img
-        roi = img[y0:y1, x0:x1]; over = roi.copy()
-        draw_skeleton(over, np.asarray(pts, np.float32) - np.array([x0, y0], np.float32), vis, color, thickness, dots, 1.0, outline)
-        cv2.addWeighted(over, alpha, roi, 1 - alpha, 0, dst=roi)
-        return img
-    for a, b in SKELETON_EDGES:
-        if FEET_OFF and (a in FEET_JOINTS or b in FEET_JOINTS): continue
-        if vis is not None and (vis[a] < VIS_THR or vis[b] < VIS_THR): continue
-        pa, pb = tuple(np.round(pts[a]).astype(int)), tuple(np.round(pts[b]).astype(int))
-        if outline: cv2.line(img, pa, pb, BGR['black'], thickness + 4, cv2.LINE_AA)
-        cv2.line(img, pa, pb, color, thickness, cv2.LINE_AA)
-    if dots:
-        for i in ((0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26) if FEET_OFF else (0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)):
-            if vis is not None and vis[i] < VIS_THR: continue
-            cv2.circle(img, tuple(np.round(pts[i]).astype(int)), thickness + 1, color, -1, cv2.LINE_AA)
+BODY_EDGES = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24), (23, 24), (23, 25), (24, 26)] + \
+             ([] if FEET_OFF else [(25, 27), (26, 28)])
+
+
+def draw_figure(img, pts, vis=None, color=PAPER, width=None, glow=0.55, alpha=1.0, head=True, edges=None):
+    """A dancer drawn like the BrodieGroove site: thick rounded limbs, a filled head, a soft glow in the same colour and a faint dark
+    edge so it reads on a bright wall. width defaults to ~5% of the torso. head='ring' for the caller (never covers their face).
+    Only the body's own rectangle is touched."""
+    if pts is None: return img
+    P = np.asarray(pts, np.float32)
+    ok = (lambda j: True) if vis is None else (lambda j: vis[j] >= VIS_THR)
+    segs = [(a, b) for a, b in (edges or BODY_EDGES) if ok(a) and ok(b)]
+    sh_ok = ok(11) and ok(12)
+    if not segs and not sh_ok: return img
+    sw = float(np.linalg.norm(P[11] - P[12])) if sh_ok else 0.0
+    torso = float(np.linalg.norm(0.5 * (P[11] + P[12]) - 0.5 * (P[23] + P[24]))) if sh_ok and ok(23) and ok(24) else 1.4 * sw
+    w = int(width) if width else int(np.clip(0.05 * torso, 3, 22))
+    hd = None
+    if head and sh_ok:
+        neck = 0.5 * (P[11] + P[12])
+        top = P[0] if ok(0) else neck + np.array([0.0, -0.55 * sw], np.float32)
+        hr = max(w * 1.2, 0.26 * sw); hd = (neck, top, hr)
+    used = [j for ab in segs for j in ab] + ([11, 12, 0] if hd is not None else [])
+    pad = w * 3 + 12 + (int(hd[2]) if hd is not None else 0)
+    Q = np.concatenate([P[used], hd[1][None]]) if hd is not None else P[used]
+    x0, y0, x1, y1 = _roi_box(Q, pad, (img.shape[1], img.shape[0]))
+    if x1 - x0 < 4 or y1 - y0 < 4: return img
+    roi = img[y0:y1, x0:x1]; off = np.array([x0, y0], np.float32)
+
+    def paint(dst, col, ww, head_r_extra=0, k=1.0):
+        ip = lambda p: tuple(np.round((p - off) * k).astype(int))
+        for a, b in segs: cv2.line(dst, ip(P[a]), ip(P[b]), col, ww, cv2.LINE_AA)
+        if hd is not None:
+            neck, top, hr = hd
+            cv2.line(dst, ip(neck), ip(top + np.array([0.0, hr * 0.6], np.float32)), col, ww, cv2.LINE_AA)
+            cv2.circle(dst, ip(top), int((hr + head_r_extra) * k), col, max(2, int(ww * 0.8)) if head == 'ring' else -1, cv2.LINE_AA)
+
+    shade = roi.copy(); paint(shade, (16, 14, 14), w + 4, 2)                 # a faint dark edge
+    cv2.addWeighted(shade, 0.35 * alpha, roi, 1 - 0.35 * alpha, 0, dst=roi)
+    if glow > 0:                                                             # the glow: the figure blurred at half size, added
+        hh, ww_ = roi.shape[:2]; small = np.zeros((max(1, hh // 2), max(1, ww_ // 2), 3), np.uint8)
+        paint(small, color, max(2, w), 1, k=0.5)
+        k = int(max(3, w * 1.6)) | 1
+        small = cv2.GaussianBlur(small, (k, k), 0)
+        big = cv2.resize(small, (ww_, hh), interpolation=cv2.INTER_LINEAR)
+        cv2.addWeighted(roi, 1.0, big, glow * alpha, 0, dst=roi)
+    if alpha >= 0.999: paint(roi, color, w)
+    else:
+        over = roi.copy(); paint(over, color, w); cv2.addWeighted(over, alpha, roi, 1 - alpha, 0, dst=roi)
     return img
+
+
+def draw_skeleton(img, pts, vis=None, color=PAPER, thickness=3, dots=True, alpha=1.0, outline=True):
+    """Old name: the site-style figure (thickness is ignored below the automatic width; dots and outline are gone)."""
+    return draw_figure(img, pts, vis, color=color, width=None if thickness <= 4 else thickness, alpha=alpha)
 
 
 def ghost_placement(pts, vis, ghost, size):
@@ -193,34 +239,27 @@ def ghost_placement(pts, vis, ghost, size):
     return anchor, scale, (not legs_ok)
 
 
-UPPER_EDGES = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (0, 11), (0, 12), (11, 23), (12, 24), (23, 24)]
+UPPER_EDGES = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24), (23, 24)]
 UPPER_JOINTS = [0, 11, 12, 13, 14, 15, 16, 23, 24]
 
 
-def draw_ghost(img, skel_norm, anchor, torso_px, color=BGR['ghost'], alpha=0.6, thickness=9, upper_only=False):
-    """The ghost over the caller's body. upper_only: when the caller's legs are out of frame, draw only the ghost's upper body."""
+def draw_ghost(img, skel_norm, anchor, torso_px, color=None, alpha=0.6, thickness=None, upper_only=False):
+    """Brodie's ghost over the caller's body, cyan and glowing like the site. upper_only: when the caller's legs are out of frame,
+    only the ghost's upper body."""
     if skel_norm is None: return img
     pts = anchor + np.asarray(skel_norm, np.float32) * torso_px
-    if not upper_only: return draw_skeleton(img, pts, None, color=color, thickness=thickness, dots=True, alpha=alpha)
-    sub = pts[UPPER_JOINTS]
-    x0, y0, x1, y1 = _roi_box(sub, thickness * 3 + 6, (img.shape[1], img.shape[0]))
-    if x1 <= x0 or y1 <= y0: return img
-    roi = img[y0:y1, x0:x1]; over = roi.copy(); off = np.array([x0, y0], np.float32)
-    for a, b in UPPER_EDGES:
-        pa, pb = tuple(np.round(pts[a] - off).astype(int)), tuple(np.round(pts[b] - off).astype(int))
-        cv2.line(over, pa, pb, BGR['black'], thickness + 4, cv2.LINE_AA); cv2.line(over, pa, pb, color, thickness, cv2.LINE_AA)
-    for i in UPPER_JOINTS: cv2.circle(over, tuple(np.round(pts[i] - off).astype(int)), thickness + 1, color, -1, cv2.LINE_AA)
-    cv2.addWeighted(over, alpha, roi, 1 - alpha, 0, dst=roi)
-    return img
+    w = int(np.clip(0.075 * torso_px, 4, 26))
+    return draw_figure(img, pts, None, color=color or CYAN, width=w, glow=0.9, alpha=alpha, edges=UPPER_EDGES if upper_only else None)
 
 
 def panel_rect(size, small=False):
+    """The reference box, under Brodie's picture-in-picture tile on the right."""
     cw, ch = size
-    sx, sy, sx1, _ = safe_box(size); s0 = sc_of(size)
-    if cw > ch:
-        pw, ph = (int(cw * 0.17), int(ch * 0.46)) if small else (int(cw * 0.26), int(ch * 0.66)); x1 = sx1; y0 = sy + int(80 * s0)
-    else:
-        pw, ph = (int(cw * 0.27), int(ch * 0.2)) if small else (int(cw * 0.40), int(ch * 0.33)); x1 = sx1; y0 = sy + int(80 * s0)
+    sx, sy, sx1, sb = safe_box(size); s0 = sc_of(size)
+    y0 = sy + pip_size(size)[1] + int(16 * s0)
+    if cw > ch: pw, ph = (int(cw * 0.15), int(ch * 0.34)) if small else (int(cw * 0.22), int(ch * 0.50))
+    else: pw, ph = (int(cw * 0.27), int(ch * 0.2)) if small else (int(cw * 0.40), int(ch * 0.33))
+    ph = min(ph, sb - y0 - int(80 * s0)); x1 = sx1
     return x1 - pw, y0, x1, y0 + ph
 
 
@@ -228,15 +267,15 @@ def draw_panel(img, ghost, label, size, sub=None, highlight=False, small=False):
     """The reference dancer in a fixed box, whole body, scaled to fit. Draws nothing without a ghost."""
     if ghost is None: return img
     x0, y0, x1, y1 = panel_rect(size, small); s0 = sc_of(size)
-    rounded_rect(img, (x0, y0), (x1, y1), BGR['panel'], r=18, alpha=0.7)
-    if highlight: cv2.rectangle(img, (x0, y0), (x1, y1), CYAN, 2, cv2.LINE_AA)
+    rounded_rect(img, (x0, y0), (x1, y1), (19, 16, 16), r=22, alpha=0.72)
+    if highlight: rounded_outline(img, (x0, y0), (x1, y1), CYAN, r=22, thick=2)
     g = np.asarray(ghost, np.float32)
     gx0, gy0 = g.min(axis=0); gx1, gy1 = g.max(axis=0); gw, gh = max(gx1 - gx0, 0.6), max(gy1 - gy0, 2.4)
     pad = 16 if small else 24; top = 30 if small else 42
     s = min((x1 - x0 - 2 * pad) / gw, (y1 - y0 - top - pad) / gh)
     cx, cy = (x0 + x1) / 2, y0 + top + (y1 - y0 - top - pad) / 2
     anchor = np.array([cx - (gx0 + gx1) / 2 * s, cy - (gy0 + gy1) / 2 * s], np.float32)
-    draw_skeleton(img, anchor + g * s, None, color=BGR['ghost'], thickness=max(3, int(s * 0.06)), dots=True)
+    draw_figure(img, anchor + g * s, None, color=CYAN, width=max(3, int(s * 0.07)), glow=0.9)
     tx.put_text(img, label, (x0 + 12, y0 + (22 if small else 30)), int((18 if small else 22) * s0), CYAN if highlight else PAPER, font='display')
     if sub and not small: tx.put_text(img, sub, (x0 + 12, y1 - 10), int(16 * s0), MUTE)
     return img
@@ -280,6 +319,45 @@ def wrap(text, px, max_w, font='body', max_lines=3):
 def fit_px(text, px, max_w, font='display', min_px=14):
     while px > min_px and tx.text_size(text, px, font)[0] > max_w: px -= 2
     return px
+
+
+def glow_text(img, text, org, px, color, anchor='ms', scale=1.0, alpha=1.0, glow=0.9, stroke=0):
+    """Display type with a soft glow of its own colour (the site's text-shadow), e.g. the count-in and PERFECT / NICE / MISS."""
+    if alpha <= 0.01: return img
+    tw, th = tx.text_size(text, max(1, int(px * scale)), 'display'); pad = int(px * 0.5) + 6
+    cx, cy = int(org[0]), int(org[1])
+    x0 = cx - tw // 2 - pad if anchor[0] == 'm' else (cx - tw - pad if anchor[0] == 'r' else cx - pad)
+    y0 = cy - th - pad if anchor[1] in ('s', 'b') else cy - th // 2 - pad
+    x1, y1 = x0 + tw + 2 * pad, y0 + th + 2 * pad + int(px * 0.3)
+    H_, W_ = img.shape[:2]; X0, Y0, X1, Y1 = max(0, x0), max(0, y0), min(W_, x1), min(H_, y1)
+    if X1 - X0 > 4 and Y1 - Y0 > 4 and glow > 0:
+        layer = np.zeros((Y1 - Y0, X1 - X0, 3), np.uint8)
+        tx.put_text(layer, text, (cx - X0, cy - Y0), px, color, font='display', anchor=anchor, scale=scale)
+        k = int(max(5, px * 0.35)) | 1
+        layer = cv2.GaussianBlur(layer, (k, k), 0)
+        roi = img[Y0:Y1, X0:X1]; cv2.addWeighted(roi, 1.0, layer, glow * alpha, 0, dst=roi)
+    tx.put_text(img, text, (cx, cy), px, color, font='display', anchor=anchor, scale=scale, alpha=alpha, stroke=stroke, stroke_color=INK)
+    return img
+
+
+@lru_cache(maxsize=8)
+def _shade_mul(w, h, top_h, bot_h):
+    """Per-pixel multipliers (uint8, 255 = unchanged) for the soft dark gradients at the top and bottom edges, as two bands."""
+    top = np.linspace(0.62, 0.0, top_h) ** 1.3 if top_h > 0 else np.zeros(0)
+    bot = np.linspace(0.0, 0.66, bot_h) ** 1.2 if bot_h > 0 else np.zeros(0)
+    mk = lambda a: np.repeat(np.repeat(np.round(255 * (1.0 - a)).astype(np.uint8)[:, None, None], w, axis=1), 3, axis=2)
+    return mk(top), mk(bot)
+
+
+def edge_shade(img, size, top=True, bottom=True):
+    """Soft dark gradients behind the top HUD and the bottom tiles, instead of a hard band: the camera stays the hero. One cached
+    uint8 multiply per band (cv2.multiply), about 1 ms."""
+    cw, ch = size; s0 = sc_of(size); _, sy, _, sb = safe_box(size)
+    th = min(ch, int(sy + 190 * s0)) if top else 0; bh = min(ch - th, int(ch - sb + 150 * s0)) if bottom else 0
+    mt, mb = _shade_mul(cw, ch, th, bh)
+    if th > 0: roi = img[:th]; cv2.multiply(roi, mt, dst=roi, scale=1.0 / 255.0)
+    if bh > 0: roi = img[ch - bh:]; cv2.multiply(roi, mb, dst=roi, scale=1.0 / 255.0)
+    return img
 
 
 # ---- HUD pieces ----
@@ -376,7 +454,7 @@ def draw_judgments(img, fxq, t, anchors, size):
         age = f.age(t); x, y = anchors.get(f.data.get('pid'), anchors.get(None, (size[0] // 2, int(170 * s0))))
         sc = fxm.pop_scale(age) * (0.7 if f.data.get('small') else 1.0); a = 1.0 if age < 0.35 else max(0.0, 1.0 - (age - 0.35) / 0.3)
         col = PLAYER.get(f.data.get('colour'), fill) if f.data.get('small') and f.data.get('verdict') == 'green' else fill
-        tx.put_text(img, word, (x, int(y - 40 * min(1.0, age / 0.6))), int(52 * s0), col, font='display', anchor='ms', stroke=4, stroke_color=stroke, alpha=a, scale=sc)
+        glow_text(img, word, (x, int(y - 24 * s0 * min(1.0, age / 0.6))), int(54 * s0), col, anchor='ms', alpha=a, scale=sc)
     return img
 
 
@@ -457,21 +535,33 @@ def draw_reveal(img, hud, size, t):
     if not r.get('scored'):
         pill_c(img, 'Step back so I can see you', mid, int(ch * 0.40), int(30 * s0), INK, AMBER)
         return img
-    score = float(r.get('score') or 0); g = progression.grade(score); land = cw > ch
-    gy = int(ch * (0.32 if land else 0.30)); ty = gy + int(130 * s0)
-    if stage == 'CHALLENGE':
-        shown = score * fxm.ease_out_cubic(min(1.0, age / 0.8))
-        tx.put_text(img, f"{shown:.0f}", (mid, gy + int(55 * s0)), int(140 * s0), PAPER, font='display', anchor='ms', stroke=4)
-        gy -= int(150 * s0) if not land else int(120 * s0)
-    if age >= (0.85 if stage == 'CHALLENGE' else 0.1):
-        u = min(1.0, (age - (0.85 if stage == 'CHALLENGE' else 0.1)) / 0.35)
-        grade_ring(img, mid, gy, int(64 * s0), g, scale=1.8 - 0.8 * fxm.ease_out_back(u), alpha=min(1.0, u * 2))
-    if age >= 0.9:
-        a = min(1.0, (age - 0.9) / 0.25); title = (hud.get('award_title') or progression.title_for(r)).upper()
-        tx.put_text(img, title, (mid, ty), fit_px(title, int(40 * s0), cw * 0.84), PINK, font='display', anchor='ms', alpha=a, stroke=3)
-    if age >= 1.4 and hud.get('cue') and hud['cue'].get('kind') != 'praise':
-        cue = hud['cue']; a = min(1.0, (age - 1.4) / 0.2); t_ = cue.get('short') or cue.get('text', '')
-        pill_c(img, t_, mid, ty + int(62 * s0), fit_px(t_, int(26 * s0), cw * 0.8, font='display'), INK, AMBER, alpha=a)
+    score = float(r.get('score') or 0)
+    cue = hud.get('cue') if hud.get('cue') and hud['cue'].get('kind') != 'praise' else None
+    shown = score * fxm.ease_out_cubic(min(1.0, age / 0.8)) if stage == 'CHALLENGE' else score
+    return draw_score_card(img, size, shown, score, title=hud.get('award_title') or progression.title_for(r), best_combo=r.get('max_combo'),
+                           tip=(cue.get('text') or cue.get('short')) if cue else None, age=age)
+
+
+def draw_score_card(img, size, shown, score, title=None, best_combo=None, tip=None, age=9.0, tips=None):
+    """The site's feedback card: slides up and fades in; a big grade letter in its colour, "NN / 100", the best combo, the title,
+    and the one tip in volt quotes."""
+    cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
+    u = fxm.ease_out_cubic(min(1.0, age * 3.0)); a = u
+    tips = [x for x in (tips or ([tip] if tip else [])) if x][:3]
+    w = min(sx1 - sx, int(560 * s0)); x0 = (cw - w) // 2; hgt = int((168 + (58 if tips else 0) + 40 * max(0, len(tips) - 1)) * s0)
+    y0 = int(ch * (0.28 if cw < ch else 0.24)) + int((1 - u) * 40 * s0); x1, y1 = x0 + w, y0 + hgt
+    rounded_rect(img, (x0, y0), (x1, y1), (19, 16, 16), r=int(24 * s0), alpha=0.92 * a)
+    if a > 0.5: rounded_outline(img, (x0, y0), (x1, y1), (70, 66, 66), r=int(24 * s0), thick=1)
+    g = progression.grade(score); col = GRADE_COL.get(g, PAPER)
+    glow_text(img, g, (x0 + int(64 * s0), y0 + int(104 * s0)), int(92 * s0), col, anchor='ms', alpha=a, glow=0.6)
+    tx.put_text(img, f"{shown:.0f} / 100", (x0 + int(124 * s0), y0 + int(62 * s0)), int(34 * s0), PAPER, font='display', alpha=a)
+    sub = (f"BEST COMBO x{int(best_combo)}" if best_combo else '') + ('   ' if best_combo and title else '') + (str(title).upper() if title else '')
+    if sub: tx.put_text(img, sub, (x0 + int(124 * s0), y0 + int(98 * s0)), fit_px(sub, int(16 * s0), w - int(140 * s0), 'body'), MUTE, alpha=a)
+    yy = y0 + int(150 * s0)
+    for i, tp in enumerate(tips):                                          # the top tip in volt, the next ones in white
+        px = int((22 if i == 0 else 18) * s0); ls = wrap(f"{i + 1}. {tp}", px, w - int(48 * s0), font='body', max_lines=2)
+        for l in ls: tx.put_text(img, l, (x0 + int(24 * s0), yy), px, VOLT if i == 0 else PAPER, alpha=a); yy += int(px * 1.3)
+        yy += int(4 * s0)
     return img
 
 
@@ -531,6 +621,29 @@ def draw_overlays(img, fxq, t, size):
     return img
 
 
+def draw_chat(img, size, caption=None, hints=False, offer=False, t=0.0):
+    """Chat and the offer: Brodie's words in a speech bubble at the bottom (the site's coach-say: rounded, with the corner by the
+    tile pointing up), the two ways to begin before the caller has spoken, and a volt "say yes" pill while an offer is open."""
+    cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
+    w = sx1 - sx; px = int(28 * s0)
+    if caption:
+        while px > int(19 * s0) and len(wrap(caption, px, w - int(48 * s0), max_lines=9)) > 3: px -= 2
+        ls = wrap(caption, px, w - int(48 * s0), max_lines=3)
+    elif hints: ls = []
+    else: return img
+    lh = int(px * 1.32); hgt = (lh * len(ls) + int(36 * s0)) if ls else 0
+    y1 = sb - int(10 * s0) - (int(64 * s0) if offer else 0); y0 = y1 - hgt
+    if ls:
+        rounded_rect(img, (sx, y0), (sx1, y1), (19, 16, 16), r=int(22 * s0), alpha=0.86)
+        rounded_rect(img, (sx1 - int(26 * s0), y0), (sx1, y0 + int(26 * s0)), (19, 16, 16), r=int(4 * s0), alpha=0.86)   # the "tail" corner
+        yy = y0 + int(18 * s0) + int(px * 0.85)
+        for l in ls: tx.put_text(img, l, (sx + int(24 * s0), yy), px, PAPER); yy += lh
+    if hints and not caption: draw_hints(img, size, sx, sb - int(150 * s0), w)
+    if offer:
+        pill_c(img, 'Say "yes" or raise both hands', cw // 2, sb - int(36 * s0), int(24 * s0), INK, VOLT, font='body')
+    return img
+
+
 def draw_caption(img, caption, size, y_bottom=None):
     if not caption: return img
     cw, ch = size; s0 = sc_of(size); px = int(24 * s0); lines = wrap(caption, px, cw - 90, max_lines=2); lh = int(px * 1.35)
@@ -558,13 +671,161 @@ def draw_safety_card(img, size=None):
     return out
 
 
+def draw_pose_step(img, hud, size, t=0.0):
+    """Pose by pose: the count number big and glowing, a ring filling over the hold (WATCH) or as the caller holds the pose
+    (MATCH IT), and one plain instruction."""
+    cw, ch = size; s0 = sc_of(size); sx, sy, _, sb = safe_box(size)
+    k = int(hud.get('current_beat', 0)) + 1; freeze = hud.get('pose_step') == 'freeze'
+    cx, cy = sx + int(70 * s0), sy + int(200 * s0)
+    glow_text(img, str(k), (cx, cy + int(40 * s0)), int(110 * s0), CYAN if freeze else VOLT, anchor='ms', glow=1.0)
+    r = int(64 * s0); c = (cx, cy)
+    p = float(hud.get('match_p') or 0.0) if freeze else float(hud.get('hold_p') or 0.0)
+    cv2.circle(img, c, r, (70, 70, 74), 4, cv2.LINE_AA)
+    if p > 0.01: cv2.ellipse(img, c, (r, r), -90, 0, int(360 * min(1.0, p)), VOLT if freeze else CYAN, 6, cv2.LINE_AA)
+    line = 'Match the pose and hold it' if freeze else 'One pose at a time'
+    pill_c(img, line, cw // 2, sb - int(84 * s0), int(22 * s0), INK, CYAN if freeze else PAPER, font='body', alpha=0.95)
+    return img
+
+
+def draw_menu(img, size, t=0.0):
+    """The opening menu (the site's six modes) as small tiles above the chat bubble: say one to pick it."""
+    cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
+    items = (('LEARN', 'one move at a time', VOLT), ('GHOST BATTLE', '3 rounds, get a code', PINK), ('DAILY', 'one shot at the board', CYAN),
+             ('SQUAD', 'friends, colour tags', AMBER), ('TELEPHONE', 'copy it, pass it on', PINK), ('CLASS', 'I lead, you follow', VOLT))
+    land = cw > ch; cols = 3 if not land else 6; rows = 2 if not land else 1
+    gap = int(10 * s0); w = (sx1 - sx - gap * (cols - 1)) // cols; hgt = int(64 * s0)
+    y0 = int(sy + (pip_size(size)[1] + int(30 * s0)) if not land else sy + int(70 * s0))
+    for i, (name, sub, col) in enumerate(items):
+        r_, c_ = divmod(i, cols); x = sx + c_ * (w + gap); y = y0 + r_ * (hgt + gap)
+        rounded_rect(img, (x, y), (x + w, y + hgt), (19, 16, 16), r=int(14 * s0), alpha=0.82)
+        cv2.rectangle(img, (x + int(10 * s0), y + int(12 * s0)), (x + int(14 * s0), y + hgt - int(12 * s0)), col, -1)
+        tx.put_text(img, name, (x + int(22 * s0), y + int(28 * s0)), fit_px(name, int(17 * s0), w - int(30 * s0)), PAPER, font='display')
+        tx.put_text(img, sub, (x + int(22 * s0), y + int(50 * s0)), fit_px(sub, int(13 * s0), w - int(30 * s0), 'body'), MUTE)
+    return img
+
+
+INK2, LINE = (21, 18, 18), (49, 44, 42)                      # the site's --ink2 #121215 (cards) and --line #2A2C31 (borders)
+
+
+def dim(img, k=0.45):
+    """Darken the whole picture toward ink (behind full-screen panels like the menu)."""
+    cv2.addWeighted(img, 1.0 - k, np.full_like(img, INK), k, 0, dst=img)
+    return img
+
+
+def _mix(c, base, k):
+    return tuple(int(round(c[i] * k + base[i] * (1 - k))) for i in range(3))
+
+
+def _mode_icon(img, kind, x, y, s, col):
+    """Simplified versions of the site's card icons, drawn in the card colour inside its 14% tile."""
+    cx, cy = x + s // 2, y + s // 2; u = s / 58.0; th = max(2, int(3 * u))
+    if kind == 'learn':                                       # steps: three rising bars
+        for i in range(3):
+            h = int((10 + 9 * i) * u); bx = int(x + (14 + 11 * i) * u)
+            cv2.rectangle(img, (bx, int(y + 44 * u) - h), (bx + int(7 * u), int(y + 44 * u)), col, -1)
+    elif kind == 'ghost':                                     # a ghost: round head, wavy hem, two eyes
+        cv2.ellipse(img, (cx, int(cy - 2 * u)), (int(14 * u), int(14 * u)), 0, 180, 360, col, th, cv2.LINE_AA)
+        cv2.line(img, (int(cx - 14 * u), int(cy - 2 * u)), (int(cx - 14 * u), int(cy + 14 * u)), col, th, cv2.LINE_AA)
+        cv2.line(img, (int(cx + 14 * u), int(cy - 2 * u)), (int(cx + 14 * u), int(cy + 14 * u)), col, th, cv2.LINE_AA)
+        pts = np.array([[cx + (-14 + 7 * i) * u, cy + (14 if i % 2 == 0 else 8) * u] for i in range(5)], np.int32)
+        cv2.polylines(img, [pts], False, col, th, cv2.LINE_AA)
+        for ex in (-5, 5): cv2.circle(img, (int(cx + ex * u), int(cy - 4 * u)), max(2, int(2.5 * u)), col, -1, cv2.LINE_AA)
+    elif kind == 'daily':                                     # a calendar
+        rounded_outline(img, (int(cx - 15 * u), int(cy - 12 * u)), (int(cx + 15 * u), int(cy + 15 * u)), col, r=int(4 * u), thick=th)
+        cv2.line(img, (int(cx - 15 * u), int(cy - 4 * u)), (int(cx + 15 * u), int(cy - 4 * u)), col, th, cv2.LINE_AA)
+        for ex in (-8, 8): cv2.line(img, (int(cx + ex * u), int(cy - 17 * u)), (int(cx + ex * u), int(cy - 9 * u)), col, th, cv2.LINE_AA)
+    elif kind == 'squad':                                     # three heads
+        for ex, r_ in ((-12, 6), (12, 6), (0, 8)):
+            cv2.circle(img, (int(cx + ex * u), int(cy - 4 * u)), int(r_ * u), col, th, cv2.LINE_AA)
+            cv2.ellipse(img, (int(cx + ex * u), int(cy + 14 * u)), (int((r_ + 3) * u), int(7 * u)), 0, 180, 360, col, th, cv2.LINE_AA)
+    elif kind == 'phone':                                     # a phone handing the move on
+        rounded_outline(img, (int(cx - 9 * u), int(cy - 16 * u)), (int(cx + 9 * u), int(cy + 16 * u)), col, r=int(4 * u), thick=th)
+        cv2.circle(img, (cx, int(cy + 11 * u)), max(2, int(2 * u)), col, -1, cv2.LINE_AA)
+        cv2.arrowedLine(img, (int(cx + 12 * u), int(cy - 6 * u)), (int(cx + 22 * u), int(cy - 6 * u)), col, th, cv2.LINE_AA, tipLength=0.4)
+    else:                                                     # class: a leader and a row of followers
+        cv2.circle(img, (cx, int(cy - 9 * u)), int(6 * u), col, th, cv2.LINE_AA)
+        for ex in (-14, 0, 14): cv2.circle(img, (int(cx + ex * u), int(cy + 11 * u)), int(4 * u), col, -1, cv2.LINE_AA)
+
+
+def draw_mode_cards(img, size, menu=None, t=0.0):
+    """The menu: the site's six mode cards (ink2 card, 1 px line border, radius 22, 14% colour icon tile, outlined Space Grotesk
+    tag). The lit card (the hands-up picker) gets its colour as the border plus a soft glow; badges: FOR YOU / PLAYED / DONE TODAY."""
+    from team.dance import modes as _modes
+    menu = menu if isinstance(menu, dict) else {}
+    cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size); land = cw > ch
+    cols, rows = (3, 2) if land else (2, 3)
+    head = menu.get('header') or 'WHAT ARE WE DOING?'
+    hy = sy + int(34 * s0)
+    tx.put_text(img, head, (sx, hy), fit_px(head, int(30 * s0), (sx1 - sx) - pip_size(size)[0] - int(20 * s0)), PAPER, font='display')
+    sub = 'SAY ONE, OR RAISE BOTH HANDS WHEN IT LIGHTS UP' if menu.get('cycling') else 'SAY THE ONE YOU WANT'
+    tx.put_text(img, sub, (sx, hy + int(26 * s0)), fit_px(sub, int(12 * s0), (sx1 - sx) - pip_size(size)[0] - int(20 * s0), 'grotesk'), MUTE, font='grotesk')
+    y0 = sy + pip_size(size)[1] + int(18 * s0)                # below Brodie's tile (top right) in both orientations
+    y_end = sb - int(70 * s0)
+    gap = int(12 * s0); w = (sx1 - sx - gap * (cols - 1)) // cols; hgt = min(int(230 * s0), (y_end - y0 - gap * (rows - 1)) // rows)
+    lit = menu.get('lit'); picked = menu.get('picked'); badges = menu.get('badges') or {}
+    r = int(22 * s0 * 0.8)
+    for i, card in enumerate(_modes.CARDS):
+        rr, cc = divmod(i, cols); x = sx + cc * (w + gap); y = y0 + rr * (hgt + gap)
+        col = PLAYER.get(card['colour'], VOLT); on = (i == lit) or (picked == card['mode'])
+        if on:                                                    # the site's hover glow: a soft halo in the card colour
+            pg = int(26 * s0); gx0, gy0 = max(0, x - pg), max(0, y - pg); gx1, gy1 = min(cw, x + w + pg), min(ch, y + hgt + pg)
+            glow = np.zeros((gy1 - gy0, gx1 - gx0, 3), np.uint8)
+            rounded_rect(glow, (x - gx0, y - gy0), (x + w - gx0, y + hgt - gy0), col, r=r)
+            glow = cv2.GaussianBlur(glow, (0, 0), 10 * s0)
+            roi = img[gy0:gy1, gx0:gx1]
+            cv2.addWeighted(roi, 1.0, glow, 0.45, 0, dst=roi)
+        rounded_rect(img, (x, y), (x + w, y + hgt), INK2, r=r, alpha=0.92)
+        rounded_outline(img, (x, y), (x + w, y + hgt), col if on else LINE, r=r, thick=max(2, int(3 * s0)) if on else 1)
+        pad = int(14 * s0); isz = int(46 * s0)
+        rounded_rect(img, (x + pad, y + pad), (x + pad + isz, y + pad + isz), _mix(col, INK2, 0.14), r=int(14 * s0))
+        _mode_icon(img, card['icon'], x + pad, y + pad, isz, col)
+        tag = card['tag'].upper(); tpx = int(11 * s0); tw_, _ = tx.text_size(tag, tpx, 'grotesk'); tp = int(8 * s0); th_ = int(tpx * 2.0)
+        tx1 = x + w - pad; tx0 = tx1 - tw_ - 2 * tp; ty0 = y + pad + int(4 * s0)
+        rounded_outline(img, (tx0, ty0), (tx1, ty0 + th_), _mix(col, INK2, 0.4), r=th_ // 2, thick=1)
+        tx.put_text(img, tag, ((tx0 + tx1) // 2, ty0 + th_ // 2), tpx, col, font='grotesk', anchor='mm')
+        ty = y + pad + isz + int(30 * s0)
+        tx.put_text(img, card['title'], (x + pad, ty), fit_px(card['title'], int(22 * s0), w - 2 * pad), PAPER, font='display')
+        b = badges.get(card['mode'])
+        floor_y = y + hgt - int(10 * s0) - (int(30 * s0) if b else 0)          # keep the badge's row clear
+        lines = wrap(card['body'], int(13 * s0), w - 2 * pad, max_lines=3)
+        for j, ln in enumerate(lines):
+            ly = ty + int(24 * s0) + j * int(18 * s0)
+            if ly > floor_y: break
+            tx.put_text(img, ln, (x + pad, ly), int(13 * s0), MUTE)
+        if b:
+            bg = VOLT if b == 'FOR YOU' else (AMBER if b == 'REMATCH' else (60, 58, 58))
+            bpx = int(11 * s0); bw, _ = tx.text_size(b, bpx, 'grotesk')
+            pill_c(img, b, x + pad + bw // 2 + int(bpx * 0.55), y + hgt - pad - bpx, bpx, INK if b in ('FOR YOU', 'REMATCH') else PAPER, bg, font='grotesk')
+    return img
+
+
+def draw_compare(img, size, cmp, t=0.0):
+    """Telephone's "watch it change": the last dancer's move and yours, side by side, looping on the beat."""
+    cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
+    a, b = cmp['a'], cmp['b']; n = max(1, min(len(a), len(b)))
+    k = int(((t - cmp.get('t0', 0.0)) / max(0.05, cmp.get('beat_s', 0.6))) * cmp.get('pb', 4)) % n
+    gap = int(16 * s0); w = (sx1 - sx - gap) // 2; hgt = int((sb - sy) * 0.55); y0 = sy + int((sb - sy) * 0.2)
+    for j, (sk, lab, col) in enumerate(((a[k], cmp.get('la', 'BEFORE'), CYAN), (b[k], cmp.get('lb', 'YOU'), VOLT))):
+        x0 = sx + j * (w + gap)
+        rounded_rect(img, (x0, y0), (x0 + w, y0 + hgt), (19, 16, 16), r=int(20 * s0), alpha=0.85)
+        g = np.asarray(sk, np.float32); gx0, gy0 = g.min(axis=0); gx1, gy1 = g.max(axis=0)
+        sc = min((w - 40) / max(gx1 - gx0, 0.6), (hgt - 70 * s0) / max(gy1 - gy0, 2.4))
+        anchor = np.array([x0 + w / 2 - (gx0 + gx1) / 2 * sc, y0 + int(50 * s0) + (hgt - 70 * s0) / 2 - (gy0 + gy1) / 2 * sc], np.float32)
+        draw_figure(img, anchor + g * sc, None, color=col, width=max(3, int(sc * 0.07)), glow=0.8)
+        pill_c(img, lab, x0 + w // 2, y0 + int(26 * s0), int(18 * s0), INK, col)
+    pill_c(img, 'WATCH IT CHANGE', cw // 2, y0 + hgt + int(36 * s0), int(22 * s0), INK, PINK)
+    return img
+
+
 def draw_main(img, hud, size, t=0.0):
     """Centre messages by state: the 5-6-7-8 count-in and the result reveal."""
+    if hud.get('pose_step') and hud.get('state') == 'show': return draw_pose_step(img, hud, size, t)
     cw, ch = size; st = hud['state']; px0, _, _, _ = panel_rect(size); mid = px0 // 2 if st == 'countin' else cw // 2; s0 = sc_of(size)
     if st == 'countin' and hud.get('countin_label'):
         k = int(hud['countin_label']); bp = hud.get('beat_pos') or 0.0; frac = bp - math.floor(bp)
         cy = int(ch * (0.30 if cw < ch else 0.42)); sz = int((150 if cw < ch else 170) * s0)
-        tx.put_text(img, str(k), (mid, cy), sz, VOLT, font='display', anchor='ms', stroke=6, stroke_color=PINK, scale=1.25 - 0.25 * fxm.ease_out_cubic(min(1.0, frac * 2)))
+        glow_text(img, str(k), (mid, cy), sz, VOLT, anchor='ms', scale=1.25 - 0.25 * frac, alpha=1.0 - 0.6 * frac, glow=1.0)
         x = mid - int(84 * s0)
         for n in (5, 6, 7, 8):
             tx.put_text(img, str(n), (x, cy + int(56 * s0)), int(30 * s0), VOLT if n == k else PAPER, font='display', anchor='ms', stroke=2); x += int(56 * s0)
@@ -584,6 +845,16 @@ def qr_matrix(data):
         return None
     q = segno.make(data, error='m', micro=False)
     return np.array([[1 if v else 0 for v in row] for row in q.matrix], np.uint8)
+
+
+def qr_payload(handle=None, code=None):
+    """What the scorecard QR opens: FaceTime with Brodie (DANCE_CALL_HANDLE), else the code's public board page when the backend has a
+    public address (DANCE_PUBLIC_URL, e.g. the Cloudflare tunnel), else nothing (a QR to a laptop-only address would be useless)."""
+    import os
+    if handle: return f"facetime:{str(handle).replace(' ', '')}"
+    base = (os.environ.get('DANCE_PUBLIC_URL') or '').strip().rstrip('/')
+    if base and code: return f"{base}/dance/board/{code}/page"
+    return None
 
 
 def draw_qr(img, data, x, y, px):
@@ -682,7 +953,7 @@ def _draw_classic_card(img, result, key_name, extra_lines=(), code=None, title=N
         by1 = ch - int(30 * s0)
         plate(out, rx0 - 10, by0, rx1 + 10, by1, (26, 24, 24), 0.92, r=24)
         qr_px = min(int(200 * s0), by1 - by0 - 30)
-        has_qr = bool(handle) and draw_qr(out, f"facetime:{str(handle).replace(' ', '')}", rx1 - qr_px - 6, by0 + (by1 - by0 - qr_px) // 2, qr_px)
+        qd = qr_payload(handle, code); has_qr = bool(qd) and draw_qr(out, qd, rx1 - qr_px - 6, by0 + (by1 - by0 - qr_px) // 2, qr_px)
         tx_w = (rx1 - qr_px - 26 - rx0) if has_qr else (rx1 - rx0)
         tx.put_text(out, 'BEAT MY SCORE', (rx0 + 10, by0 + int(44 * s0)), int(24 * s0), VOLT, font='display')
         tx.put_text(out, str(code), (rx0 + 10, by0 + int(150 * s0)), fit_px(str(code), int(110 * s0), tx_w - 10), PAPER, font='display')
@@ -724,7 +995,7 @@ def draw_photo_card(photo, result, code=None, title=None, award_title=None, xp=N
         by1 = y1; by0 = by1 - int(190 * s0)
         plate(out, x0 - 8, by0, x1 + 8, by1, (26, 24, 24), 0.92, r=24)
         qr_px = int(150 * s0)
-        has_qr = bool(handle) and draw_qr(out, f"facetime:{str(handle).replace(' ', '')}", x1 - qr_px - 10, by0 + (by1 - by0 - qr_px) // 2, qr_px)
+        qd = qr_payload(handle, code); has_qr = bool(qd) and draw_qr(out, qd, x1 - qr_px - 10, by0 + (by1 - by0 - qr_px) // 2, qr_px)
         tw = (x1 - qr_px - 30 - x0) if has_qr else (x1 - x0)
         tx.put_text(out, 'BEAT MY SCORE', (x0 + 12, by0 + int(40 * s0)), int(24 * s0), VOLT, font='display')
         tx.put_text(out, str(code), (x0 + 12, by0 + int(122 * s0)), fit_px(str(code), int(84 * s0), tw - 10), PAPER, font='display')
@@ -761,7 +1032,9 @@ def mirror_view(frame_bgr, lm_img, ghost):
 
 
 # ---- the minimal, per-state layer (2026-10-11 redesign): one coach badge, one state chip, at most one line of text ----
-STAGE_CHIP = dict(WATCH=('WATCH', CYAN), **{'WITH ME': ('WITH ME', CYAN), 'YOUR TURN': ('YOUR TURN', VOLT), 'WARM-UP': ('WARM-UP', AMBER)},
+STAGE_CHIP = dict(WATCH=('WATCH', CYAN), **{'WITH ME': ('WITH ME', CYAN), 'YOUR TURN': ('YOUR TURN', VOLT), 'WARM-UP': ('WARM-UP', AMBER),
+                                             'GET READY': ('GET READY', AMBER), 'MATCH IT': ('MATCH IT', CYAN), 'RECORD': ('RECORDING', PINK)},
+                  EXPLORE=('BRODIE', VOLT), CHOOSE=('PICK A MODE', VOLT),
                   CHALLENGE=('CHALLENGE', PINK), PREPARE=('SETUP', AMBER), OFFER=('START?', VOLT), CONFIRM=('READY?', VOLT), PAUSED=('PAUSED', AMBER), REVIEW=('NICE', VOLT))
 TEMPO_LABEL = ((0.55, 'VERY SLOW'), (0.68, 'SLOW'), (0.83, 'MEDIUM'), (0.95, 'FAST'), (9.0, 'FULL SPEED'))
 
@@ -775,22 +1048,44 @@ def safe_box(size):
     return side, top, cw - side, bottom
 
 
+def pip_size(size):
+    s0 = sc_of(size); w = int(118 * s0); return w, int(w * 4 / 3)
+
+
 def draw_badge(img, size, speaking=False, t=0.0, state='idle', still=False):
-    """Brodie (official kit art) small at the top-left of the safe area, with his name. state: idle / listening / speaking /
-    thinking / offline (see avatar.py)."""
+    """Brodie (official kit art) in a picture-in-picture tile at the top right of the safe area, like a FaceTime tile; a volt
+    ring pulses while he talks or listens. state: idle / listening / speaking / thinking / offline (see avatar.py)."""
     from .avatar import avatar
-    s0 = sc_of(size); x0, y0, _, _ = safe_box(size); h = int(84 * s0)
+    _, sy, sx1, _ = safe_box(size); w, h = pip_size(size)
     st = 'speaking' if speaking and state == 'idle' else state
-    avatar().draw(img, x0 + h // 2 + 4, y0 + h // 2, h, st, t, still=still)
-    tx.put_text(img, 'BRODIE', (x0 + h + int(14 * s0), y0 + h // 2), int(24 * s0), PAPER, font='display', anchor='lm', stroke=3)
+    avatar().draw_tile(img, sx1 - w, sy, w, h, st, t, still=still)
     return img
 
 
-def draw_state_chip(img, size, key):
-    lab = STAGE_CHIP.get(key)
-    if not lab: return img
-    s0 = sc_of(size); _, y0, x1, _ = safe_box(size); px = int(26 * s0); w = tx.text_size(lab[0], px, 'display')[0]
-    pill_c(img, lab[0], x1 - w // 2 - int(16 * s0), y0 + int(42 * s0), px, INK, lab[1])
+def draw_state_chip(img, size, key, tempo=None):
+    """The stage pill at the top left (the site's WATCH / GET READY / YOUR TURN): translucent, solid volt when it's your turn;
+    the tempo as a small chip beside it. Returns the y under it."""
+    lab = STAGE_CHIP.get(key); s0 = sc_of(size); sx, sy, _, _ = safe_box(size)
+    if not lab: return sy
+    hot = key in ('YOUR TURN', 'CHALLENGE', 'OFFER', 'CONFIRM')
+    px = int(20 * s0); tw = tx.text_size(lab[0], px, 'display')[0]; hgt = int(40 * s0); pad = int(16 * s0); y = sy + int(8 * s0)
+    rounded_rect(img, (sx, y), (sx + tw + 2 * pad, y + hgt), lab[1] if hot else (255, 255, 255), r=hgt // 2, alpha=1.0 if hot else 0.2)
+    tx.put_text(img, lab[0], (sx + pad + tw // 2, y + hgt // 2), px, INK if hot else PAPER, font='display', anchor='mm')
+    if tempo:
+        t_ = tempo_label(tempo); tpx = int(15 * s0); ttw = tx.text_size(t_, tpx, 'display')[0]; x = sx + tw + 2 * pad + int(8 * s0)
+        rounded_rect(img, (x, y + int(6 * s0)), (x + ttw + int(20 * s0), y + hgt - int(6 * s0)), (255, 255, 255), r=hgt // 2, alpha=0.12)
+        tx.put_text(img, t_, (x + int(10 * s0) + ttw // 2, y + hgt // 2), tpx, PAPER, font='display', anchor='mm')
+    return y + hgt
+
+
+def draw_score_block(img, size, y, score=None, label='SCORE', combo=0):
+    """Under the stage pill: a big score and its small grey label, and a pink "xN COMBO" while a combo runs (the site's HUD)."""
+    s0 = sc_of(size); sx = safe_box(size)[0]
+    if score is not None:
+        tx.put_text(img, f"{score:02.0f}", (sx, y + int(60 * s0)), int(54 * s0), PAPER, font='display', stroke=2)
+        tx.put_text(img, label, (sx + 2, y + int(84 * s0)), int(14 * s0), PAPER, font='display', stroke=2); y += int(90 * s0)
+    if combo and combo > 1:
+        tx.put_text(img, f"x{combo} COMBO", (sx, y + int(26 * s0)), int(22 * s0), PINK, font='display', stroke=2)
     return img
 
 
@@ -820,18 +1115,39 @@ def draw_progress_row(img, hud, size):
     return img
 
 
+VERDICT_TILE = dict(green=VOLT, amber=CYAN, red=RED)
+
+
+def draw_squad_counts(img, squad, n_beats, current, size):
+    """Squad: a row of small count marks per dancer above the count tiles (their colour = nailed it, grey = not yet, dim = missed),
+    so everyone sees who nailed which count."""
+    cw, ch = size; s0 = sc_of(size); n = max(1, n_beats); sx, _, sx1, sb = safe_box(size)
+    gap = int(6 * s0); tw = min(int(64 * s0), (sx1 - sx - gap * (n - 1)) // n); x0 = cw // 2 - (tw * n + gap * (n - 1)) // 2
+    rh = int(10 * s0); y = sb - int(40 * s0) - int(14 * s0) - int(12 * s0) - (rh + int(5 * s0)) * len(squad)
+    for row in squad:
+        col = PLAYER.get(row.get('colour'), PAPER); vs = row.get('verdicts') or []
+        tx.put_text(img, (row.get('name') or row.get('colour') or '').upper()[:6], (x0 - int(8 * s0), y + rh // 2), int(12 * s0), col, font='display', anchor='rm')
+        for b in range(n):
+            v = vs[b] if b < len(vs) else None; x = x0 + b * (tw + gap)
+            c = col if v == 'green' else (90, 88, 88) if v is None else (60, 58, 58)
+            rounded_rect(img, (x, y), (x + tw, y + rh), c, r=rh // 2, alpha=1.0 if v == 'green' else 0.8)
+        y += rh + int(5 * s0)
+    return img
+
+
 def draw_beat_dots(img, verdicts, current, n_beats, size, t=0.0):
-    """The count as a row of dots at the bottom of the safe area: grey until danced, then volt / amber / red; the current count is bigger."""
-    cw, ch = size; s0 = sc_of(size); n = max(1, n_beats); _, _, _, yb = safe_box(size)
-    gap = min(int(60 * s0), int((cw * 0.88) / n)); r = max(5, min(int(15 * s0), int(gap * 0.32)))
-    x0 = cw // 2 - gap * (n - 1) // 2; y = yb - int(30 * s0)
-    plate(img, x0 - gap // 2 - 6, y - r - int(14 * s0), x0 + gap * (n - 1) + gap // 2 + 6, y + r + int(14 * s0), INK, 0.45, r=r + int(14 * s0))
+    """The count as numbered tiles along the bottom (the site's timeline): translucent until danced, the current count cyan with a
+    white outline, then volt (perfect), cyan (nice) or red (miss) with a dark number."""
+    cw, ch = size; s0 = sc_of(size); n = max(1, n_beats); sx, _, sx1, sb = safe_box(size)
+    gap = int(6 * s0); tw = min(int(64 * s0), (sx1 - sx - gap * (n - 1)) // n); hgt = int(40 * s0)
+    x0 = cw // 2 - (tw * n + gap * (n - 1)) // 2; y = sb - hgt - int(14 * s0)
     for b in range(n):
-        v = verdicts[b] if b < len(verdicts) else None; c = (x0 + b * gap, y)
-        col = (110, 106, 106) if v is None else BGR[v]
-        rr = int(r * (1.35 + 0.15 * fxm.pulse(t, 2.0))) if b == current else r
-        cv2.circle(img, c, rr, col, -1, cv2.LINE_AA)
-        if b == current: cv2.circle(img, c, rr + 3, PAPER, 2, cv2.LINE_AA)
+        v = verdicts[b] if b < len(verdicts) else None; x = x0 + b * (tw + gap)
+        if v is not None: rounded_rect(img, (x, y), (x + tw, y + hgt), VERDICT_TILE.get(v, BGR.get(v, PAPER)), r=int(10 * s0))
+        elif b == current: rounded_rect(img, (x, y), (x + tw, y + hgt), CYAN, r=int(10 * s0), alpha=0.4)
+        else: rounded_rect(img, (x, y), (x + tw, y + hgt), (255, 255, 255), r=int(10 * s0), alpha=0.12)
+        if b == current: rounded_outline(img, (x, y), (x + tw, y + hgt), PAPER, r=int(10 * s0), thick=2)
+        if tw >= int(22 * s0): tx.put_text(img, str(b + 1), (x + tw // 2, y + hgt // 2), int(18 * s0), INK if v is not None else PAPER, font='display', anchor='mm')
     return img
 
 
@@ -849,7 +1165,8 @@ def draw_setup_view(img, setup, size, state, t=0.0):
     cw, ch = size; s0 = sc_of(size)
     ok = bool(setup.get('ok_now'))
     col = VOLT if ok else (200, 200, 200)
-    bw, bh = int(min(cw * 0.42, ch * 0.32)), int(ch * 0.72); x0, y0 = cw // 2 - bw // 2, int(ch * 0.14)
+    _sx, _sy, _sx1, _sb = safe_box(size); y0 = _sy + int(150 * s0)
+    bw, bh = int(min(cw * 0.42, ch * 0.32)), min(int(ch * 0.72), _sb - y0 - int(110 * s0)); x0 = cw // 2 - bw // 2
     head = int(bw * 0.22); cx = cw // 2
     for i in range(0, 360, 12):                                # a dashed outline: head circle, then the body box
         if (i // 12) % 2: continue
@@ -861,13 +1178,26 @@ def draw_setup_view(img, setup, size, state, t=0.0):
     for xx in range(x0, x0 + bw, int(26 * s0)):
         cv2.line(img, (xx, y0 + bh), (min(xx + int(14 * s0), x0 + bw), y0 + bh), col, 3, cv2.LINE_AA)
     checks = setup.get('checks') or {}
-    x = cw // 2 - int(3 * 118 * s0) // 2; y = safe_box(size)[1] + int(132 * s0)
+    x = cw // 2 - int(3 * 118 * s0) // 2; y = safe_box(size)[1] + int(110 * s0)
     for name, label in (('body', 'BODY'), ('distance', 'DISTANCE'), ('light', 'LIGHT')):
         good = checks.get(name, False)
         pill_c(img, label, x + int(59 * s0), y, int(18 * s0), INK if good else PAPER, VOLT if good else (60, 58, 58))
         x += int(118 * s0)
+    issue = setup.get('issue'); cxm = (setup.get('metrics') or {}).get('center_x')
+    if issue in ('off_center', 'too_close', 'too_far') and state != 'CONFIRM':      # an arrow: where to move
+        ay = int(ch * 0.5); L = int(70 * s0); colA = AMBER
+        if issue == 'off_center' and cxm is not None:
+            right = cxm < 0.5                                         # the view is mirrored: the caller moves toward the middle as they see it
+            x1_ = cx + (bw // 2 + int(30 * s0)) * (1 if right else -1); x0_ = x1_ - L * (1 if right else -1)
+            cv2.arrowedLine(img, (x0_, ay), (x1_, ay), colA, int(10 * s0), cv2.LINE_AA, tipLength=0.45)
+        else:
+            back = issue == 'too_close'; yb_ = y0 + bh - int(10 * s0)
+            for dx in (-bw // 2 - int(40 * s0), bw // 2 + int(40 * s0)):
+                p0 = (cx + dx, yb_ - (0 if back else L)); p1 = (cx + dx, yb_ - (L if back else 0))
+                cv2.arrowedLine(img, p0, p1, colA, int(9 * s0), cv2.LINE_AA, tipLength=0.4)
     from .setup import SHORT
-    line = 'Say "ready" or raise both hands' if state == 'CONFIRM' else (SHORT.get(setup.get('issue')) if setup.get('issue') else ('Hold still...' if ok else None))
+    line = 'Say "ready" or raise both hands' if state == 'CONFIRM' else (SHORT.get(setup.get('issue')) if setup.get('issue') else
+                                                                         (setup.get('prompt') or 'Hold still...') if ok else None)
     if line:
         pill_c(img, line, cw // 2, ch - int(150 * s0), int(32 * s0), INK, VOLT if (ok or state == 'CONFIRM') else AMBER)
     if ok and state != 'CONFIRM' and setup.get('hold', 0) > 0:
@@ -893,7 +1223,7 @@ def compose(frame_bgr, lm_img, hud, ghost=None, show_live=True, size=None, squad
         for pid, (lm, colour) in squad_lms.items():
             if lm is None: continue
             v, _ = visibility(lm); p = lm_px(lm, sw, sh, tr)
-            draw_skeleton(img, p, v, color=PLAYER.get(colour, VOLT), thickness=4)
+            draw_figure(img, p, v, color=PLAYER.get(colour, VOLT), head='ring', glow=0.4)
             anchors[pid] = _head_anchor(p, v, size)
             tag = next(((r.get('name') or r['colour']).upper() for r in squad or () if r['pid'] == pid), colour.upper())
             x, y = anchors[pid]; pill_c(img, tag, x, y + int(38 * s0), int(18 * s0), INK, PLAYER.get(colour, VOLT))
@@ -902,21 +1232,28 @@ def compose(frame_bgr, lm_img, hud, ghost=None, show_live=True, size=None, squad
         if st == 'attempt':
             done = [v for v in hud.get('verdicts', []) if v is not None]
             if done: col = BGR[done[-1]]
-        draw_skeleton(img, pts, vis, color=col, thickness=3)
-        anchors[None] = _head_anchor(pts, vis, size)
+        draw_figure(img, pts, vis, color=col if st == 'attempt' else PAPER, head='ring', glow=0.4)
+        anchors[None] = (size[0] // 2, safe_box(size)[1] + int(210 * s0))      # the judgement flash: centred near the top, like the site
     if ghost is not None and st in ('show', 'countin', 'attempt'):
         img = draw_panel(img, ghost, '', size, highlight=(st == 'show'), small=(st == 'attempt'))
-    rounded_rect(img, (0, 0), (size[0], safe_box(size)[1] + int(130 * s0)), INK, r=0, alpha=0.35)
+    edge_shade(img, size)
     draw_badge(img, size, hud.get('speaking', False), t, state=hud.get('avatar_state', 'idle'), still=(st == 'attempt'))
-    draw_state_chip(img, size, 'PAUSED' if hud.get('paused') else stage)
-    draw_progress_row(img, hud, size)
+    y = draw_state_chip(img, size, 'GET READY' if st == 'countin' and stage != 'WATCH' else ('PAUSED' if hud.get('paused') else stage), tempo=hud.get('tempo'))
+    if (scoring or stage == 'YOUR TURN') and not squad and st in ('attempt', 'scored', 'feedback'):
+        draw_score_block(img, size, y, hud.get('running_score'), combo=hud.get('combo', 0) if st == 'attempt' else 0)
+    elif st == 'attempt' and not squad and hud.get('combo', 0) > 1:
+        draw_score_block(img, size, y, None, combo=hud.get('combo', 0))
     draw_battle(img, hud.get('battle'), size, t)
     if squad: draw_squad_strip(img, squad, size)
     if st == 'attempt' and scoring:
-        if not squad: draw_combo(img, hud, size, t)
+        if not squad and hud.get('combo', 0) >= 4: edge_glow(img, PINK, 0.18 + 0.32 * min(hud['combo'], 12) / 12.0 * (0.7 + 0.3 * fxm.pulse(t, 2.0)))
         if fxq is not None: draw_judgments(img, fxq, t, anchors, size); draw_tip(img, fxq, t, size)
     img = draw_main(img, hud, size, t)
-    if st in ('countin', 'attempt', 'show') and not hud.get('demo'):
+    if squad and st in ('attempt', 'scored', 'feedback'):                 # who nailed which count: one small row per dancer, in their colour
+        draw_squad_counts(img, squad, hud['n_beats'], hud['current_beat'] if st == 'attempt' else -1, size)
+    if hud.get('pose_step'):
+        img = draw_beat_dots(img, hud.get('verdicts') or [None] * hud['n_beats'], hud.get('current_beat', -1), hud['n_beats'], size, t)
+    elif st in ('countin', 'attempt', 'show') and not hud.get('demo'):
         img = draw_beat_dots(img, hud['verdicts'] if st == 'attempt' else [None] * hud['n_beats'], hud['current_beat'] if st == 'attempt' else -1, hud['n_beats'], size, t)
     hint = (framing_hint(parts) if lm_img is not None else "I can't see you") if not squad else hud.get('squad_hint')
     if st == 'attempt' and hint and not hint.startswith('Upper body'):
@@ -930,20 +1267,15 @@ def compose(frame_bgr, lm_img, hud, ghost=None, show_live=True, size=None, squad
 def draw_recap(img, recap, size):
     """Between attempts, while Brodie talks: the grade badge, the title, one tip. Nothing else."""
     r = recap.get('result') or {}; cw, ch = size; s0 = sc_of(size)
-    y = ch - int(250 * s0)
     if not r.get('scored'):
-        pill_c(img, recap.get('cue') or 'Step back so I can see you', cw // 2, y, int(28 * s0), INK, AMBER); return img
-    g = progression.grade(r['score']); grade_ring(img, cw // 2, y - int(70 * s0), int(46 * s0), g)
-    title = (recap.get('title') or progression.title_for(r)).upper()
-    tx.put_text(img, title, (cw // 2, y + int(10 * s0)), fit_px(title, int(32 * s0), cw * 0.86), PINK, font='display', anchor='ms', stroke=3)
-    if recap.get('cue'):
-        t_ = recap['cue']; pill_c(img, t_, cw // 2, y + int(62 * s0), fit_px(t_, int(24 * s0), cw * 0.84, 'body'), INK, AMBER, font='body')
-    return img
+        pill_c(img, recap.get('cue') or 'Step back so I can see you', cw // 2, ch - int(250 * s0), int(28 * s0), INK, AMBER); return img
+    return draw_score_card(img, size, float(r['score']), float(r['score']), title=recap.get('title') or progression.title_for(r),
+                           best_combo=r.get('max_combo'), tip=recap.get('cue'), tips=recap.get('tips'))
 
 
 def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, best=None, recap=None, caption=None, footer=None, fxq=None, t=0.0,
                  gesture=None, paused=False, safety=False, players=None, hints=False, setup=None, speaking=False, state=None, avatar_state='idle',
-                 countdown=None):
+                 countdown=None, menu=False, compare=None):
     """Chat, offer, setup and between-phrase view. In chat Brodie (kit avatar) is big at the bottom-left with his words beside him;
     in setup he moves to the top-left and the setup guide takes over; overlays on top. Everything stays inside the FaceTime safe area."""
     sh, sw = frame_bgr.shape[:2]; size = size or canvas_size(sw, sh)
@@ -954,35 +1286,26 @@ def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, be
     if players:
         for lm, colour in players:
             if lm is not None:
-                v, _ = visibility(lm); draw_skeleton(img, lm_px(lm, sw, sh, tr), v, color=PLAYER.get(colour, VOLT), thickness=3)
-    elif lm_img is not None and state in ('PREPARE', 'CONFIRM'):
-        draw_skeleton(img, lm_px(lm_img, sw, sh, tr), vis, color=VOLT, thickness=3)
+                v, _ = visibility(lm); draw_figure(img, lm_px(lm, sw, sh, tr), v, color=PLAYER.get(colour, VOLT), head='ring', glow=0.4)
+    elif lm_img is not None:                                     # your figure is always there (chat, offer, setup, between moves)
+        draw_figure(img, lm_px(lm_img, sw, sh, tr), vis, color=PAPER, head='ring', glow=0.4, alpha=0.85 if state in (None, 'EXPLORE', 'OFFER', 'CHOOSE') else 1.0)
     in_setup = setup is not None and state in ('PREPARE', 'CONFIRM')
-    big = state in (None, 'EXPLORE', 'OFFER') and not recap and countdown is None
-    from .avatar import avatar
-    if big:
-        h = int(min(cw * 0.36, ch * 0.26)); cx = x0 + h // 2 + 6; cy = y1 - h // 2 - int(10 * s0)
-        plate(img, x0 - 6, cy - h // 2 - 14, x1 + 6, cy + h // 2 + 14, INK, 0.55, r=h // 2 + 14)
-        avatar().draw(img, cx, cy, h, avatar_state, t)
-        tx0 = cx + h // 2 + int(22 * s0); tw = x1 - tx0
-        if caption:
-            px = int(32 * s0)
-            while px > int(20 * s0) and len(wrap(caption, px, tw, max_lines=9)) > 3: px -= 2
-            ls = wrap(caption, px, tw, max_lines=3); lh = int(px * 1.3)
-            yy = cy - (lh * len(ls)) // 2 + int(px * 0.8)
-            for l in ls: tx.put_text(img, l, (tx0, yy), px, PAPER, stroke=2); yy += lh
-        elif hints:
-            draw_hints(img, size, tx0, cy - int(34 * s0), tw)
-        else:
-            tx.put_text(img, 'BRODIE', (tx0, cy + int(12 * s0)), int(36 * s0), PAPER, font='display', stroke=3)
-        draw_state_chip(img, size, 'OFFER' if state == 'OFFER' else None)
+    chat = state in (None, 'EXPLORE', 'OFFER', 'CHOOSE') and not recap and countdown is None
+    cards = bool(menu) and state in ('CHOOSE', None)
+    if cards: dim(img, 0.45)                                    # the cards sit on a darkened picture (you still see yourself)
+    edge_shade(img, size)
+    draw_badge(img, size, speaking, t, state=avatar_state)
+    if not cards: draw_state_chip(img, size, 'PAUSED' if paused else (state or 'EXPLORE'))
+    if cards:
+        draw_mode_cards(img, size, menu, t)
+        if caption: draw_caption(img, caption, size, y_bottom=y1 - int(4 * s0))
+    elif chat:
+        draw_chat(img, size, caption, hints, offer=state == 'OFFER', t=t)
     else:
-        rounded_rect(img, (0, 0), (cw, y0 + int(96 * s0)), INK, r=0, alpha=0.35)
-        draw_badge(img, size, False, t, state=avatar_state)
-        draw_state_chip(img, size, 'PAUSED' if paused else state)
         if in_setup: draw_setup_view(img, setup, size, state, t)
         elif recap: draw_recap(img, recap, size)
-        if caption and not in_setup: draw_caption(img, caption, size, y_bottom=y1 - int(4 * s0))
+        if caption and not in_setup and not recap: draw_caption(img, caption, size, y_bottom=y1 - int(4 * s0))
+    if compare is not None: draw_compare(img, size, compare, t)
     if countdown is not None:
         tx.put_text(img, str(countdown), (cw // 2, int(ch * 0.42)), int(220 * s0), VOLT, font='display', anchor='ms', stroke=8, stroke_color=PINK)
         pill_c(img, 'FINISH POSE!', cw // 2, int(ch * 0.42) + int(80 * s0), int(34 * s0), INK, VOLT)
