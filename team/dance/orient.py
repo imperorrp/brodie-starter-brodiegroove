@@ -79,8 +79,9 @@ class Orient:
         a = np.asarray(lm_img, np.float32); c = self.calib
         if not c.ready: c.add(a, lm_world, aspect)
         if min(a[[L_SH, R_SH], 3]) < 0.5: return out
-        rs, rh, tor = _widths(a, aspect)
         hips = min(a[[L_HIP, R_HIP], 3]) >= 0.5
+        if not hips: return out                                     # no hips (seated, close): the torso length is unknown, so no turn estimate
+        rs, rh, tor = _widths(a, aspect)
         r0s = c.r_sh or 0.95; r0h = c.r_hip or 0.55                        # typical adult proportions until calibrated
         cs = float(np.clip(rs / r0s, 0.0, 1.0)); ch = float(np.clip(rh / r0h, 0.0, 1.0))
         cosv = 0.6 * cs + 0.4 * ch if hips else cs

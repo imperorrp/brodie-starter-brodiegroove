@@ -127,3 +127,19 @@ def test_friend_code_loads_the_saved_ghost(tmp_path):
     assert s.queued_key['name'] == f"ghost_{won['code']}" and s.challenge.get('ghost') and "Maya's ghost" == s.queued_key['title']
     db.delete_user('Maya')
     assert db.get_ghost(won['code']) is None                                           # "forget me" deletes the ghost too
+
+
+def test_freed_codes_take_their_ghost_and_history_with_them(tmp_path):
+    import time as _t
+    s, clock, log = _session()
+    db = s.backend.db; db.DB_PATH = str(tmp_path / 'c.db'); db.init()
+    old = db.post_result(dict(name='Old', key='k', mode='battle', total=250.0, rounds=[]))['code']
+    with db._conn() as c:
+        c.execute('UPDATE dance_results SET created = ? WHERE code = ?', (_t.time() - 40 * 86400, old))
+        c.execute('INSERT INTO dance_ghosts (code, name, src_key, bpm, per_beat, data, total, score100, difficulty, created) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                  (old, 'Old', 'k', 100.0, 4, '[]', 250.0, 83.0, None, _t.time() - 40 * 86400))
+    db.post_result(dict(name='New', key='k', mode='learn', total=50.0, rounds=[]))       # triggers the cleanup
+    assert db.get_result(old) is None and db.get_ghost(old) is None
+    with db._conn() as c:
+        assert c.execute('SELECT 1 FROM dance_ghost_tokens WHERE code = ?', (old,)).fetchone() is None
+        assert c.execute('SELECT 1 FROM dance_shares WHERE code = ?', (old,)).fetchone() is None

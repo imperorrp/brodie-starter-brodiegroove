@@ -41,12 +41,29 @@ import random, time as _time
 CODE_TABLES = ('dance_results', 'dance_chains', 'dance_classes')
 
 
+CODE_DAYS = 30
+
+
+def _free_old_codes(c):
+    """Codes older than CODE_DAYS that nobody has taken on lately go back in the pool. Everything keyed by such a code (its ghost,
+    the ghost's save token, its share log) is deleted in the same transaction, so a reissued code never inherits someone else's
+    ghost or history. A code with a live ghost is never freed."""
+    cut = _time.time() - CODE_DAYS * 86400
+    old = [r[0] for r in c.execute('SELECT code FROM dance_results WHERE code IS NOT NULL AND created < ? AND code NOT IN '
+                                   '(SELECT code FROM dance_shares WHERE kind = ? AND t > ?) AND code NOT IN (SELECT code FROM dance_ghosts WHERE created >= ?)',
+                                   (cut, 'challenge_start', cut, cut)).fetchall()]
+    for code in old:
+        for t in ('dance_ghosts', 'dance_ghost_tokens', 'dance_shares'): c.execute(f'DELETE FROM {t} WHERE code = ?', (code,))
+        c.execute('UPDATE dance_results SET code = NULL WHERE code = ?', (code,))
+
+
 def _new_code(c, table):
     """A four-digit code free in every code table: a spoken code then means exactly one thing (a battle, a telephone chain or a
     class). `table` is kept for the callers' readability."""
     for _ in range(200):
         code = f'{random.randint(1000, 9999)}'
-        if all(c.execute(f'SELECT 1 FROM {t} WHERE code = ?', (code,)).fetchone() is None for t in CODE_TABLES): return code
+        if all(c.execute(f'SELECT 1 FROM {t} WHERE code = ?', (code,)).fetchone() is None
+               for t in CODE_TABLES + ('dance_ghosts', 'dance_ghost_tokens', 'dance_shares')): return code   # never a code something still points at
     raise RuntimeError('no free code')
 
 
@@ -70,6 +87,7 @@ def add_result(name, key, mode, total, rounds, score100=None, challenge=None, is
     site promises codes to winners) stores the result with no code (NULL; SQLite allows many) and returns None."""
     if score100 is None: score100 = float(total) / 3.0 if mode in ('battle', 'squad_battle') else float(total)
     with _lock, _conn() as c:
+        _free_old_codes(c)
         code = _new_code(c, 'dance_results') if issue_code else None
         c.execute('INSERT INTO dance_results (code, name, key, mode, total, rounds, created, score100, challenge) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                   (code, name or 'anonymous', key, mode, float(total), json.dumps(rounds), _time.time(), float(score100), str(challenge) if challenge else None))

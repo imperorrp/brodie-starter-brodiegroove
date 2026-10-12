@@ -94,3 +94,41 @@ def test_room_options_patch_restores_and_upgrades(monkeypatch):
 def test_pacing_defaults_are_3_to_4_seconds():
     from team.dance import pacing
     assert 3.0 <= pacing.MOVE_GAP_S <= 4.0 and 3.0 <= pacing.POSE_HOLD_S <= 4.0 and 3.0 <= pacing.TURN_GAP_S <= 4.0 and 3.0 <= pacing.ROUND_GAP_S <= 4.0
+
+
+def test_guards():
+    from team.dance.guards import FrameBudget, CameraShift, VideoFreeze
+    fb = FrameBudget(); out = []
+    for i in range(200): out.append(fb.add(i / 15, 80.0))
+    assert [o for o in out if o] == ['lite', 'fps12']
+    fb2 = FrameBudget(); assert not any(fb2.add(i / 15, 20.0) for i in range(200))
+    rng = np.random.default_rng(0)
+    scene = (rng.random((480, 640, 3)) * 255).astype(np.uint8)
+    import cv2; scene = cv2.GaussianBlur(scene, (0, 0), 6)
+    cs = CameraShift(); assert not cs.update(0.0, scene) and not cs.update(0.066, scene)
+    assert cs.update(0.133, np.roll(scene, 120, axis=1))                         # the phone swung sideways
+    cs2 = CameraShift(); person = scene.copy(); cs2.update(0.0, person)
+    person2 = scene.copy(); person2[200:300, 300:360] = 255                       # someone moving in part of the picture
+    assert not cs2.update(0.066, person2)
+    assert VideoFreeze.status(10.0, 9.5) == 'ok' and VideoFreeze.status(10.0, 8.0) == 'unjudged' and VideoFreeze.status(10.0, 5.0) == 'abort'
+
+
+def test_new_screens_render():
+    """Every new screen draws in portrait and landscape without errors and changes the picture (smoke test for render parity)."""
+    from team.dance import render, screens, choreo as ch
+    from team.dance.reference import phrase_slice
+    k = ch.generate('hiphop', 'beginner', seed=7); pv = phrase_slice(k, 0)[3][0]
+    for size in ((720, 1280), (1280, 720)):
+        fr = np.full((size[1], size[0], 3), 90, np.uint8)
+        base = render.compose_idle(fr, None, 'Brodie', size=size, state='REVIEW')
+        for kw in (dict(state='CHOOSE', menu=dict(lit=2, cycling=True, badges={'daily': 'DONE TODAY', 'battle': 'REMATCH'})),
+                   dict(state='REVIEW', brk=dict(label='NEXT MOVE', t0=0.0, dur=3.5, preview=pv), t=1.0),
+                   dict(state='CHOOSE', board=dict(title="Today's daily", n=3, rows=[dict(rank=1, name='Maya', score=90), dict(rank=2, name='Ana', score=70, me=True)]))):
+            img = render.compose_idle(fr, None, 'Brodie', size=size, **kw)
+            assert img.shape[:2] == (size[1], size[0]) and np.abs(img.astype(int) - base.astype(int)).mean() > 1.0
+        card = render.draw_photo_card(np.full((size[1], size[0], 3), 120, np.uint8), dict(scored=True, score=77.0), code='4471', mode_label='Ghost Battle')
+        assert card.shape[:2] == (size[1], size[0])
+    img = np.zeros((1280, 720, 3), np.uint8)
+    pts = np.zeros((33, 2), np.float32); pts[:, 0] = 360; pts[:, 1] = np.linspace(300, 900, 33)
+    screens.draw_squad_tags(img, [dict(pts=pts, vis=np.ones(33), colour='pink', label='MAYA', score=81.0)], 1.0)
+    assert img.any()

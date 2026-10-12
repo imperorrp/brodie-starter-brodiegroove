@@ -40,6 +40,7 @@ from team.dance import cues, pacing                              # noqa: E402
 from team.dance import ghost as ghost_mod                        # noqa: E402
 from team.dance.orient import Orient, facing_phrase              # noqa: E402
 from team.dance import addressed as addr_mod, answers as answers_mod, audio_in   # noqa: E402
+from team.dance.guards import FrameBudget, CameraShift, VideoFreeze               # noqa: E402
 from team.dance.fx import FxQueue                                # noqa: E402
 from team.dance.gestures import GestureDetector                  # noqa: E402
 from team.dance.telemetry import Telemetry                       # noqa: E402
@@ -166,6 +167,7 @@ WIN_TOTAL = dict(beginner=195, intermediate=216, advanced=240)                  
 CARD_HOLD_S = 6.0                                                                # the score card stays this long before the menu returns
 CYCLE_START_S = 10.0                                                              # quiet after the hello: the card highlight starts cycling
 CYCLE_STEP_S = 2.5                                                                # one card lit this long
+BOARD_RE = re.compile(r"(leader ?board|the board|daily board|scoreboard|high ?scores?|top scores?|who'?s winning)", re.I)
 BYE_RE = re.compile(r"\b(bye|goodbye|good night|i'?m done|i'?m finished|that'?s (it|all) for (today|now)|gotta go|got to go|see you|hang up|end the call)\b", re.I)
 FALSE_PROGRESS_RE = re.compile(r"\b(locked in|all set|you'?re set|here we go|starting now|let'?s go|camera'?s (good|perfect|set))\b", re.I)
 CMD_ORDER = sorted(CMD_WORDS, key=len, reverse=True)
@@ -567,6 +569,11 @@ class DanceSession:
         self.vad_echo = 0.0; self.music_duck_until = 0.0; self.barge_s = 0.0; self.barge_eng = None      # voice over the music (on_vad)
         self.last_addr = 1.0; self.yes_asked_q = None                   # how addressed the last line was; the question "was that a yes?" was asked for
         self.move_card_ui = None                 # the current move's name for the step chip ("MOVE 1 · SIDE POINT")
+        self.board_ui = None                     # today's daily board on screen: dict(title, rows, rank, n)
+        self.budget = FrameBudget(); self.cam_shift = CameraShift(); self.camera_moved = False   # guards.py
+        self.voice_was_up = False; self.voice_down_since = None; self.call_warned = False; self.end_after_activity = False
+        self.call_max_s = 60.0 * float(os.environ.get('DANCE_CALL_MAX_MIN', '20') or 20)        # a soft cap per call (the team's Live minutes)
+        self.subject_luma = None; self.fall_since = None
         self.last_addressed_t = -1e9             # the caller last said something short / to Brodie (gates Gemini's offers in CHOOSE)
         self.noise_utts = []                     # times of unusable utterances while choosing (a noisy room starts the card picker)
         self.played = []                         # modes played this call (PLAYED badges, the rematch shortcut)
@@ -868,6 +875,7 @@ class DanceSession:
         self.last_utt = (now, it, cmd)
         if cmd in ('pain', 'forget'): self._cmd(cmd, 'voice'); return
         if not addressed and cmd not in ('stop', 'pause'):
+            if st == 'CHOOSE': self.noise_utts.append(now)           # room talk while choosing: the card picker starts sooner
             return                                                    # not said to Brodie: no answer, no offer, no mode pick
         if it['affirm'] and not it['question'] and self.q_open and addr < answers_mod.ACCEPT_AT + 0.05 and self.state in ('OFFER', 'PREPARE', 'CONFIRM', 'REVIEW'):
             if answers_mod.decide(answers_mod.confidence('weak' if len(text.split()) > 6 else 'strong', addressed=addr >= 0.7),
@@ -884,6 +892,7 @@ class DanceSession:
             tips = [c.get('text') for c in self.last_cues if c.get('text')][:2]       # no Gemini tools: answer from the analysis ourselves
             if tips: self.say_line(' And '.join(tips) + '.', key='howdid'); return
         if st in ('CHOOSE', 'EXPLORE'):
+            if BOARD_RE.search(low) and not modes: self.task(self.show_board(wait=False)); return  # "show me the board" / "leaderboard"
             if MENU_RE.search(low) and not modes: self.say_menu(); return                # "what can you do?" -> the menu again
             if len(modes) >= 2 and not it['deny']:                                       # "battle or the daily?" -> which one
                 self.say_line(f"Which one: {self.mode_name(modes[0])} or {self.mode_name(modes[1])}?", key='menu'); return
@@ -975,7 +984,7 @@ class DanceSession:
         if not kinds:
             self.code_pending = None
             self.context(f"Code {code} doesn't match any battle, telephone chain or class.")
-            self.say_line(f"I can't find code {digits}. Can you say it again, one digit at a time?", key='code_q'); return None
+            self.say_line(f"I can't find code {digits}. Say it again one digit at a time, or want to battle my ghost instead?", key='code_q'); return None
         if len(kinds) > 1:
             self.code_pending = code
             names = ' or a '.join(dict(battle='battle', telephone='telephone', **{'class': 'class'})[k['kind']] for k in kinds)
@@ -1453,7 +1462,7 @@ class DanceSession:
                                gesture=extra.get('gesture'), paused=extra.get('paused', False), safety=extra.get('safety', False), players=extra.get('players'),
                                hints=extra.get('hints', False), setup=extra.get('setup'), speaking=extra.get('speaking', False), state=extra.get('state'),
                                avatar_state=extra.get('avatar_state', 'idle'), countdown=extra.get('countdown'), menu=extra.get('menu', False),
-                               compare=extra.get('compare'), brk=extra.get('brk'))
+                               compare=extra.get('compare'), brk=extra.get('brk'), board=extra.get('board'))
         return self._encode_sync(img)
 
     async def prepare(self, frame, ms):
@@ -1742,7 +1751,8 @@ class DanceSession:
             self.telemetry.event('mode_started', mode=self.mode, call_mode=self.call_mode)
             await self.guard(run(), f'mode {self.mode}')
             self.played.append(self.mode)
-            self.reset_activity_state(); after = True                    # every feature ends back on the menu ("What's next?")
+            self.reset_activity_state(); after = True
+            if self.end_after_activity: self.bye_req = True             # the call cap was reached during the activity                    # every feature ends back on the menu ("What's next?")
             if self.safety_stop: break
             if not self.lobby_enabled: break                              # test mode (DANCE_LOBBY=0): one routine, then end
 
@@ -2048,6 +2058,9 @@ class DanceSession:
             o = self.orient_state or {}
             if res['issue'] is None and (o.get('away') or abs(o.get('yaw') or 0.0) > 50):    # back to the camera, or turned well away
                 res = dict(res, ok_stable=False, issue='not_facing')
+            backlit = self.subject_luma is not None and self.luma is not None and self.luma > 110 and self.subject_luma < 0.55 * self.luma
+            if res['issue'] is None and backlit and (self.cur_lm is None or float(np.mean(np.asarray(self.cur_lm)[:, 3])) < 0.6):
+                res = dict(res, ok_stable=False, issue='dark')                # a window behind them: tracking suffers
             self.setup_ui = res
             if res['issue'] != note_issue and now - note_t > 4.0:          # Gemini's picture of the camera, only when it changes
                 note_issue = res['issue']; note_t = now; self.context(self.camera_note_text())
@@ -2117,6 +2130,8 @@ class DanceSession:
                 spoken_issue = issue; t_issue = now; last_said[issue] = now
                 self.telemetry.event('setup_issue', issue=issue)
                 fp = facing_phrase((self.orient_state or {}).get('yaw') or 0.0, (self.orient_state or {}).get('away')) if issue == 'not_facing' else None
+                if issue == 'dark' and self.subject_luma is not None and self.luma is not None and self.luma > 110 and self.subject_luma < 0.55 * self.luma:
+                    fp = "There's bright light behind you. Turn so the window or lamp is in front of you." 
                 self.say_line(fp or self.pick(f'first_{issue}', lines_for(issue, tr.upper)), key='setup')
             elif issue == spoken_issue and now - max(t_issue, self.last_caller_text_t) > 15 and checkins.get(issue, 0) < 3:
                 t_issue = now; last_said[issue] = now; checkins[issue] = checkins.get(issue, 0) + 1
@@ -2242,18 +2257,69 @@ class DanceSession:
         self.say_line(line, key='bye' if kind == 'end' else 'nudge', ttl=10)
         if kind == 'end': self.task(self._end_soon(8.0))
 
+    def _guards(self, now, bgr, lm, engine):
+        """guards.py checks once a frame: work per frame vs the budget, the phone moving mid-try, a backlit caller, someone on the floor,
+        the voice dropping out, the per-call cap. Each acts at most once per occurrence and never throws."""
+        try:
+            ms = (time.perf_counter() - getattr(self, '_frame_t0', time.perf_counter())) * 1000.0
+            step = self.budget.add(now, ms) if self.now is time.monotonic else None
+            if step == 'lite' and self.pose_variant != 'lite':
+                self.pose_variant = 'lite'; self.mpose = None; self.pose = None; self.telemetry.event('budget', step='lite', ms=round(ms, 1))
+                print('[dance] frames over budget: lite pose model', flush=True)
+            elif step == 'fps12' and self.fps > 12:
+                self.fps = 12.0; self.telemetry.event('budget', step='fps12'); print('[dance] frames over budget: 12 fps', flush=True)
+            in_try = engine is not None and getattr(engine, 'state', None) == 'attempt' and isinstance(engine, PhraseEngine)
+            if bgr is not None and self.cam_shift.update(now, bgr) and in_try and not self.camera_moved:
+                self.camera_moved = True; self.telemetry.event('camera_moved')
+            if bgr is not None and lm is not None:                       # backlight: the person much darker than the picture
+                a = np.asarray(lm, np.float32); v = a[:, 3] > 0.5
+                if v.sum() >= 8:
+                    h, w_ = bgr.shape[:2]; xs = np.clip(a[v, 0] * w_, 0, w_ - 1); ys = np.clip(a[v, 1] * h, 0, h - 1)
+                    roi = bgr[int(ys.min()):int(ys.max()) + 1, int(xs.min()):int(xs.max()) + 1]
+                    if roi.size: self.subject_luma = float(roi[::4, ::4].mean())
+            if lm is not None and self.state == 'ACTIVITY' and not self.safety_stop:      # someone down on the floor and still
+                a = np.asarray(lm, np.float32)
+                if min(a[[11, 12, 23, 24], 3]) > 0.5:
+                    d = 0.5 * (a[11, :2] + a[12, :2]) - 0.5 * (a[23, :2] + a[24, :2])
+                    flat = abs(d[0]) > 1.8 * abs(d[1]) and float(np.mean(a[[23, 24], 1])) > 0.7
+                    self.fall_since = (self.fall_since or now) if flat else None
+                    if self.fall_since is not None and now - self.fall_since > 2.0:
+                        self.fall_since = None; self.pause_req = True; self.telemetry.event('fall_check')
+                        self.say_line("Whoa, everyone okay? Take a second. Say resume, or raise both hands, when you're good.", key='safety', urgent=True)
+            model = self._model()
+            if model is not None and self.now is time.monotonic:          # the voice dropped (session closed, relay limit)
+                up = bool(getattr(model, 'started', False))
+                if up: self.voice_was_up = True; self.voice_down_since = None
+                elif self.voice_was_up:
+                    self.voice_down_since = self.voice_down_since or now
+                    self.caption = ("Brodie lost his voice for a second. Hang on!", now)
+                    if now - self.voice_down_since > 30.0 and not self.stop:
+                        self.telemetry.event('voice_lost'); print('[dance] voice lost for 30 s: ending the call', flush=True); self.stop = True
+            if self.t0 is not None and self.lobby_enabled and self.call_max_s > 0:
+                age = now - self.t0
+                if age > self.call_max_s - 120 and not self.call_warned:
+                    self.call_warned = True; self.say_line("Heads up: two minutes left on this call. Let's make them count!", key='bye')
+                if age > self.call_max_s and not self.stop:
+                    if self.state in LOBBY: self.bye_req = True
+                    else: self.end_after_activity = True
+        except Exception as e:
+            print(f'[dance] guard skipped: {e!r}', flush=True)
+
     async def _end_soon(self, s):
         t = self.now()
         while self.now() - t < s and not self.stop: await self.frame_step(None); await self.sleep(1.0 / self.fps)
         self.stop = True
 
     async def _frame_step(self, engine):
+        self._frame_t0 = time.perf_counter()
         if self.vad_utt_end is not None: self.check_unclear(self.now())
         frame, t = self.newest_frame()
         if frame is None: return
         self.last_frame_t = self.now()
         bgr, lm, w = await self.prepare(frame, int((self.now() - self.t0) * 1000))
         now = self.now(); self.cur_lm = lm; self.cur_world = w
+        self._guards(now, bgr, lm, engine)
+        if self.board_ui is not None and now > getattr(self, 'board_until', 0.0) + 0.5: self.board_ui = None
         self._dead_air_step(now, lm, engine)
         if self._orient_pid != self.tracker.primary_id:                   # a new main dancer: calibrate their proportions afresh
             self._orient_pid = self.tracker.primary_id; self.orient = Orient()
@@ -2302,7 +2368,7 @@ class DanceSession:
             else:
                 cap = self.caption[0] if self.caption and now - self.caption[1] < 6.0 else None
                 hints = self.state == 'EXPLORE' and self.last_caller_text_t < (self.t0 or 0) + 0.01
-                extra.update(menu=self.menu_ui if self.state == 'CHOOSE' else None, compare=getattr(self, 'compare_ui', None), brk=self.break_ui)
+                extra.update(menu=self.menu_ui if self.state == 'CHOOSE' else None, compare=getattr(self, 'compare_ui', None), brk=self.break_ui, board=self.board_ui)
                 extra.update(title=self.idle_title, lines=[], recap=self.recap if self.state == 'REVIEW' else None, caption=cap, footer=None,
                              gesture=getattr(self, 'gesture_ui', None), paused=self.paused, safety=self.safety_stop, hints=hints,
                              setup=self.setup_ui if self.state in ('PREPARE', 'CONFIRM') else None)
@@ -2432,6 +2498,14 @@ class DanceSession:
                 if self.pause_req or c == 'pause':
                     self.pause_req = False
                     eng.abort(self.now()); self.cut_audio(); paused = True; break
+                frozen = VideoFreeze.status(self.now(), self.last_frame_t) == 'abort' and eng.state == 'attempt'
+                if (self.camera_moved or frozen) and isinstance(eng, PhraseEngine) and not demo and not practice:
+                    why = 'camera_moved' if self.camera_moved else 'video_frozen'; self.camera_moved = False
+                    eng.abort(self.now()); self.cut_audio(); eng.result = dict(scored=False, score=0.0, reason=why)
+                    self.telemetry.event('try_stopped', why=why)
+                    self.say_line("Looks like the phone moved. Let's check the camera." if why == 'camera_moved' else
+                                  "Your video froze. Let's try that again.", key='setup', urgent=True)
+                    break
                 await self.sleep(1.0 / self.fps)
             if paused and not self.stop:
                 await self.paused_wait()
@@ -3025,7 +3099,7 @@ class DanceSession:
         n_ph = len([p for p in self.key['phrases'] if not p.get('combined')])
         tempo = (self.key.get('default_tempo') or LEVEL_CFG[self.difficulty]['tempo']) * self.tempo
         plan = [(0, tempo, False), (min(1, n_ph - 1), tempo, False), (0, tempo, True)]
-        totals = {}; last_sq = None
+        totals = {}; sums = {}; danced = {}; last_sq = None
         self.say_line("Squad battle! Two big steps between each of you. Everyone follows the ghost, and the highest total wins.", key='round')
         await self.idle(3.5)
         for i, (pi, tmp, freestyle) in enumerate(plan):
@@ -3037,13 +3111,15 @@ class DanceSession:
             sq = eng.squad if isinstance(eng, SquadEngine) else None
             if sq:
                 last_sq = sq
-                for x in sq['players']:
-                    totals[x['label']] = totals.get(x['label'], 0.0) + (x['score'] or 0.0)
+                for x in sq['players']:                               # a round someone stepped out of is unscored for them, not a zero
+                    if x.get('scored', x.get('score') is not None):
+                        sums[x['label']] = sums.get(x['label'], 0.0) + (x['score'] or 0.0); danced[x['label']] = danced.get(x['label'], 0) + 1
             self.record_round(eng, item=f'Q{i}')
             self.rounds.append(dict(round=i + 1, phrase=pi, squad={k: v for k, v in (sq or {}).items() if k in ('ranking', 'crew_sync', 'crew_mean', 'squad_title')}))
             self.summarise(eng, round_label=f"Squad round {i + 1} of 3. ")
             await self.idle(4.5)
         self.extras['squad'] = True
+        totals = {lab: 3.0 * sums[lab] / danced[lab] for lab in sums if danced.get(lab)}   # ranked by the mean of the rounds each one danced
         await self.finish_squad(totals, last_sq)
 
     def start_squad(self):
@@ -3133,6 +3209,7 @@ class DanceSession:
             lb = await self.backend.call('GET', f"/dance/leaderboard?key={self.key['name']}&mode=daily&since={midnight:.0f}&limit=10000") or []
             daily_rank = next((i + 1 for i, row in enumerate(lb) if row.get('code') == self.my_code), None)
             if daily_rank: board = dict(rank=daily_rank, n=len(lb), owner="today's daily")
+            if lb and not self.stop: await self.show_board(lb, mine=self.my_code, seconds=8.0)
         aw = await self.award(mode)
         title = progression.title_for(best_r or {}, dict(duel_win=self.extras.get('duel_win'), glow_up=any(x.get('glow_up') for x in self.session_rounds)))
         brag = await self.brag_lines(score100, board, mode)
@@ -3164,6 +3241,30 @@ class DanceSession:
         await self.idle(9.0)
         if mode == 'battle' and self.my_code and len(getattr(self, 'ghost_rounds', []) or []) >= 2 and not self.stop:
             await self.offer_ghost_save(total)
+
+    def board_rows(self, lb, mine=None):
+        return [dict(rank=i + 1, name=r.get('name'), score=r.get('score100') if r.get('score100') is not None else r.get('total'),
+                     me=bool(mine) and r.get('code') == mine) for i, r in enumerate(lb)]
+
+    async def show_board(self, lb=None, mine=None, seconds=8.0, wait=True):
+        """Today's daily board (top five; the caller's own row in volt, added below if they're further down) with one spoken line."""
+        if lb is None:
+            midnight = time.mktime(datetime.date.today().timetuple())
+            lb = await self.backend.call('GET', f"/dance/leaderboard?key={choreo.daily()['name']}&mode=daily&since={midnight:.0f}&limit=10000") or []
+        rows = self.board_rows(lb, mine); me = next((r for r in rows if r['me']), None)
+        top = rows[:5]
+        if me is not None and me not in top: top = rows[:4] + [me]
+        self.board_ui = dict(title="Today's daily", rows=top, n=len(rows))
+        self.telemetry.event('board_shown', n=len(rows), rank=me['rank'] if me else None)
+        if me: line = f"You're number {me['rank']} of {len(rows)} today!" + (" Top of the board!" if me['rank'] == 1 else '')
+        elif rows: line = f"Here's today's board. {str(rows[0]['name']).split()[0]} leads with {float(rows[0]['score'] or 0):.0f}."
+        else: line = "Nobody's on today's board yet. Take the daily and you're first!"
+        t = self.now(); self.say_line(line, key='board', ttl=10); self.board_until = t + seconds
+        if not wait: return                                            # the running loop keeps drawing it until board_until
+        try:
+            while self.now() - t < seconds and not self.stop: await self.frame_step(None); await self.sleep(1.0 / self.fps)
+        finally:
+            self.board_ui = None
 
     async def offer_ghost_save(self, total):
         """A winner's ghost is saved only with a yes (body points, never video; 30 days; "forget me" deletes it)."""

@@ -41,7 +41,7 @@ def score(text, question_open=False, brodie_speaking=False, caller_name=None):
     names = [w for w in re.findall(r"\b[A-Z][a-z]{2,}\b", t) if w.lower() not in _COMMON and w != 'Brodie' and w != caller_name]
     if _THIRD.search(low) or (names and n > 6 and not re.search(r"\b(i'?m|my name|call me)\b", low)): s -= 0.4
     if n > 20 and not _OUR_WORDS.search(low): s -= 0.3
-    if brodie_speaking: s -= 0.3
+    if brodie_speaking: s -= 0.1 if _OUR_WORDS.search(low) else 0.3   # talking over Brodie, likely to someone else (unless it's our words)
     weird = sum(1 for w in words if not _EN.match(w.lower())) + sum(1 for w in words if len(w) > 3 and not re.search(r'[aeiouy]', w.lower()))
     if n >= 3 and weird / n > 0.4: s -= 0.2
     return max(0.0, min(1.0, s))

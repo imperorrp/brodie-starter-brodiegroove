@@ -113,6 +113,7 @@ up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
 | "one two three four" heard as a code | a battle code offer from a count-in | outside the menu a code needs the word "code" or a short line, and counting runs are refused |
 | Squad "ready" by hands up | needed every dancer's hold in the same frame (never happened) | a majority of dancers within 3 s |
 | Space carried over | the next activity skipped the space question | asked again per activity (a rematch within 10 min keeps it) |
+| A seated caller (no hips in view) told to face the camera | the turn estimate needs hips; without them it isn't guessed |
 | Hands still up after picking a card / a finish pose | one gesture answered two questions | a fired hold is blocked until the hands come down; the card and the picker arm only once hands are seen down |
 | Two dancers crossing; a dancer stepping out | ids (colours, scores) swapped; returners became strangers; a walk-in took a solo routine after 2 s | `tracker.py`: motion + torso colours, re-ID for 20 s (squad) / 6 s (solo), swap check after a crossing, primary held 8 s and never handed to a walk-in mid-routine |
 | A turn read as a wrong arm | "lift your arm" when the caller had turned | `orient.py`: turn size from calibrated widths, direction from depth with hysteresis; tips skip joints the camera can't judge |
@@ -139,7 +140,11 @@ up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
 | Phone portrait vs laptop landscape | canvas follows the camera; FaceTime via Chert is portrait 720×1280; everything in the FaceTime safe area |
 | Someone walks in | the primary keeps the scoring through 8 s of absence; mid-routine nobody else takes over unless alone and centred |
 | Two to four dancers | colour tags; re-identified by clothing colours after an occlusion; children and dancers further back count in squad mode; more than four: "I can score four at a time. The rest of you can cheer!" |
-| Camera freezes / partial body / caller leaves mid-pause | as before (unscored and back to the camera check; never auto-resumes) |
+| Camera freezes / partial body / caller leaves mid-pause | video gone > 4 s mid-try: "Your video froze. Let's try that again." (unscored, back to the camera check); never auto-resumes |
+| The phone moves or falls mid-try | the whole picture jumps (phase correlation on a tiny frame; a dancer moving only changes part of it): "Looks like the phone moved. Let's check the camera." (unscored) |
+| A bright window behind the caller | the person is much darker than the picture: "There's bright light behind you. Turn so the window or lamp is in front of you." |
+| Someone falls | torso flat and low for 2 s during the music: the routine pauses, "Whoa, everyone okay?" |
+| Slow computer | frames over 55 ms for 5 s: the lite pose model, then 12 fps (`guards.FrameBudget`) |
 
 ## 7. Other edge cases
 
@@ -154,6 +159,10 @@ up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
 | "menu" between moves | the lesson ends with its card, then the cards |
 | "bye" | goodbye, the call ends |
 | Nothing danced, then stop | no finish pose, XP or card |
+| Brodie's voice drops (session closed, relay limit) | a caption "Brodie lost his voice for a second. Hang on!"; after 30 s the call ends |
+| A long call | a warning 2 minutes before `DANCE_CALL_MAX_MIN` (20); the call ends on the menu, never mid-routine |
+| Squad dancer steps out for a round | that round is unscored for them (not zero); ranking uses the mean of the rounds each one danced |
+| Coach style | "hype coach", "chill coach" or "strict coach" any time (or ask Brodie); kept for the call and saved for a named caller |
 
 ## 8. What we can still improve
 
@@ -166,6 +175,6 @@ up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
 
 ## 9. How to test
 
-- **Unit tests:** `.venv/Scripts/python -m pytest -q team/dance/tests` (159).
+- **Unit tests:** `.venv/Scripts/python -m pytest -q team/dance/tests` (163).
 - **Eval:** `.venv/Scripts/python -m team.dance.eval.run_eval --jobs 6` (45 scenarios, plus the duel). `real_*` use real-call timing and a caller who answers Brodie's actual lines (`--realistic --answer key:text`); `choose_*` cover the cards; `battle_*` the win-only code and saved ghosts.
 - **Live on Chrome:** `.\team\scripts\chrome.ps1 -Restart` (restart so the new code loads), then follow §3.

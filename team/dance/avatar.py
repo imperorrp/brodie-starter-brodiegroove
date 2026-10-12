@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw
 HERE = os.path.dirname(os.path.abspath(__file__))
 ART = os.path.join(HERE, 'assets', 'brodie', 'brodie-sit-wave.png')
 CREAM = (239, 231, 218); INK = (26, 25, 25)                 # RGB, from the kit
-VOLT_BGR = (61, 255, 217); PANEL_BGR = (38, 33, 31); GREY_BGR = (152, 145, 142)
+VOLT_BGR = (61, 255, 217); PANEL_BGR = (21, 18, 18); GREY_BGR = (152, 145, 142)
 CROP = (110, 0, 1000, 1110)                                 # head + waving arm + BRODIE tank
 MOUTH = (546, 512, 192, 102)                                 # centre x, y and radii over the grin (source pixels)
 LEFT_EYE = (389, 367, 52, 70)
