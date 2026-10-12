@@ -1,0 +1,174 @@
+# BrodieGroove to-do
+
+Ranked. `[ ]` open, `[~]` started, `[x]` done, `[!]` blocked. Tick things here; write the story of how in `../PROGRESS.md`;
+when a tick changes what works, update `STATUS.md`; when it changes a file's role, update `CODEBASE.md`.
+Sources folded in: `PLANNED_IMPROVEMENTS.md`, `team/docs/AUDIT_2026-10-11.md`, `CONVERSATION.md` §8,
+`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-11 late evening ET.
+
+The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every engineering item below should earn a post.
+
+## 0. Now (before Monday's launch post)
+
+- [x] Submission issue opened on `seraphimlabs-dev/brodie-starter` (2026-10-11).
+- [x] Sunday LinkedIn post tagging Brodie and Chert (the entry ticket) (2026-10-11).
+- [x] Public repo `imperorrp/ivyhacks-brodiegroove` up to date; it is the only repo from now on (2026-10-11 22:16 ET).
+- [ ] **Log every post** at getbrodie.com/ivyhacks (resubmit with the same team name each time).
+- [ ] **Retire `team/docs/demo-and-posting.md`**; its checklist is stale and its plan is "_tbd_". `team/promo/STRATEGY.md`
+      is the plan now; keep one source.
+- [ ] **Set `DANCE_CALL_HANDLE`** in `.env.local` to the line's FaceTime address and document it in `.env.example`
+      (keep the value out of git). Without it the scorecard has no QR. Zero code.
+- [ ] **Book Chert slots for the week** and put the times on the site; set `call_line` / `call_url` in
+      `team/promo/config.json`, re-run `python -m team.promo.render` and `python -m team.promo.clips`.
+- [ ] **One real FaceTime call that lands.** Worker on `dance_loop.ps1 -AgentName dance-battle-agent-ivyhacks`, `chert.ps1
+      dev --agent ...` (or a Mac), call the line, prop the phone, go through CHOOSE → scorecard. Film it with a second
+      phone. This is the clip every post needs and the first time the portrait canvas, the QR and live tool calls are seen.
+
+## 1. The posting week: one feature, one post, each day
+
+Calendar from `promo/STRATEGY.md` (posters and reels exist for every day) with the feature that makes each post true,
+from `PLANNED_IMPROVEMENTS.md` §4. Times: TikTok/Reels 6–9 PM, IG feed 11 AM–1 PM, X 12–3 PM, LinkedIn 8–10 AM.
+
+| Day | Post (ready) | Ship so the post is real | |
+|---|---|---|---|
+| Mon 10/12 | Launch: the line is open; 46 s pitch video | Line booked, `call_line` set, handle set; the real-call clip | [ ] |
+| Tue 10/13 | How it works carousel; 55 s Maya film | **Brodie's face with moods** (drive `avatar.py` expression from the last verdict and coach style; one sprite layer + a mood variable) and the **Open Graph result card** (`GET /dance/result/{code}/og.png` with Pillow; unfurls when a link is pasted) | [ ] |
+| Wed 10/14 | "Real scores, not vibes" (builder day): 60/30/10, battle capture | **Start-offset search before the DTW** (§3.1) so the numbers deserve the post; the self-consistency table if it exists | [ ] |
+| Thu 10/15 | Pick your Brodie: HYPE / CHILL / COACH | Record the three voice-overs `data/tmp/promo/vo/{hype,chill,coach}.wav` + `lines.json` (nothing writes them yet; `team/video/voice.py` has the shape) | [ ] |
+| Fri 10/16 | Squad up, get tagged | A squad run with real people on one camera (`-MaxPoses 4`; a GPU box or a fast laptop: 4 poses cost 237 ms/frame here) | [ ] |
+| Sat 10/17 | Which grade are you? #BeatMyBrodie weekend | Nothing new to build; push the fill-in template and reply to every tag | [ ] |
+| Sun 10/18 | Week one on the line: stats + scorecard wall | Fill `recap` in `config.json` from `GET /metrics` and `GET /dance/funnel`; re-render Day 7 | [ ] |
+| Every day | "Today's 8-count" story (`daily/daily_9x16_<day>.png`) | The daily key rotation (`choreo.DAILY_ROTATION`) matches `config.json` `daily_style` | [ ] |
+
+Stretch posts if a day has room (each reuses existing routes): the **Break Room feed** (Brodie posts one line about each
+call to a public page, names stripped; "my AI dance coach talks about me behind my back"), the **spectator link** (a page
+that subscribes to `coach-video` in our own room and sends emoji on the data channel), the **teacher page** ("Brodie for
+dance teachers": class mode's heatmap page as the product shot; a LinkedIn post), **creator upload** (URL or file →
+`reference.build_key` → a code), the **telephone chain page** with a drift curve, a **week leaderboard** and a "Brodie
+Wrapped" card. Keep battle, telephone and class as spoken words that work, not a menu.
+
+## 2. Quick wins (hours each, ranked by value per minute)
+
+- [ ] **"Ready" button on `team/web/phone.html`** mapped to the affirm path in `live.button_cmd` (about six lines);
+      makes laptop filming reliable when Gemini mishears "ready".
+- [ ] **Shorter waits in `demo-` rooms**: `wait_choice` reprompts after 18 s; use 6 s when `lobby_enabled` is off.
+- [ ] **"It noticed"**: `--vision` during the lobby only, one persona rule (mention one visible thing, never guess personal
+      facts); gate by Gemini minutes (240 per team on the relay).
+- [ ] **Memory across calls**: store the last three weak counts and the last cue in the profile; open the next call with
+      "last time count six got you".
+- [ ] **Fix `chrome.ps1` dispatch mismatch**: it starts a worker with `--agent-name=` while `mint_link.py` adds a dispatch
+      whenever `AGENT_NAME` is set in `.env.local`; pass the name through or unset it for the Chrome path.
+- [ ] **`publish_site.ps1`** copies `team\web\site` (gone); point it at `team\web\groove` like the `.sh`.
+- [ ] **`link_local.ps1`** should mint through `mint_link.py` (named dispatch, `.go_url`) as the comments claim.
+- [ ] **Install note** in both READMEs: `uv pip install -r requirements.txt -r team/requirements.txt` (pillow, segno and
+      the noise-cancellation plugin were missing in this venv at one point).
+- [ ] **Landing page copy**: the hero says "Call Brodie and dance." with no number; show the slot times and a `facetime:`
+      link when the line is ours; make the six modes and three coach styles explicit; FAQ on privacy, the upper-body rule,
+      codes and squad tagging; Open Graph and Twitter card tags; a kit favicon.
+- [ ] **Live board embed** on the site (`/dance` leaderboard and the daily board, read-only) and the funnel on a dashboard.
+
+## 3. Scorer: make the number mean something (the week's engineering core)
+
+Today a cropped-webcam caller lands 10 to 15 points above random noise against their own key. In order:
+
+- [ ] **3.1 Start-offset search** (±1 beat of constant offset) before the banded DTW (half a day). Fixes most "late on the
+      beat" verdicts on honest attempts.
+- [ ] **3.2 Three explicit losses**: aligned pose error on the DTW path, timing penalised against the original beat clock,
+      and a dynamics term from body-relative joint velocities; each with its own threshold (one day).
+- [ ] **3.3 Fix the energy feature**: world landmarks are hip-centred, so hip translation is meaningless; use body-relative
+      joint velocities (two hours).
+- [ ] **3.4 Camera-tilt normalisation** of the angle channels so a desk laptop and a floor phone score alike (half a day).
+- [ ] **3.5 One-Euro smoothing** of landmarks, tuned so it does not smear rhythm; measure the added phase delay (two hours).
+- [ ] **3.6 The self-consistency benchmark** (then permanent): same performer repeats the reference (target 90+), cropped
+      copy (70+), slightly slower, opposite arm (localised error), turned toward the camera, partial occlusion (no
+      confident false correction), intentionally late (timing error survives the DTW), freestyle. Put the table in the
+      README; it is the strongest technical post.
+- [ ] **3.7 `beat-this`** for uploads: beat phase and downbeats instead of a fixed BPM.
+- [ ] **3.8 Re-tune thresholds** (`DANCE_GREEN_DEG`, `AMBER_DEG`, `HALF_MARKS_DEG`, timing windows) on the team's own
+      clean / late / wrong-arm takes, not on synthetic data.
+
+## 4. Conversation and coaching (from `CONVERSATION.md` §8 and `PLANNED_IMPROVEMENTS.md` §3)
+
+- [ ] **True barge-in while Brodie talks**: the echo guard drops the caller's audio while Brodie speaks; sending silence
+      instead of dropping frames is a starter change (`Floor.gate_input`).
+- [ ] **Speaker check for yes** (require the caller's own voice; needs a speaker model).
+- [ ] **Language**: offer to continue in the caller's language (per-call input-language switch).
+- [ ] **Noise cancellation per mode**: switch BVC off for squads mid-call (the selector is fixed when the track is subscribed).
+- [ ] **Reference depth**: re-ingest the AIST++ keys with per-count facing, travel and height for "step toward me" / "turn
+      left" cues (today: facing size only).
+- [ ] **Phase-aware structured feedback**: add the movement phase and the measured delay ("your right arm peaks half a beat
+      late on counts 5 to 6"); pick the drill by error type (late → tempo down and loop; wrong limb → isolate; low energy → "bigger").
+- [ ] **Intervention timing policy** on the live verdicts: one tip after two consecutive misses of the same kind, never
+      twice in four counts, never over the count-in.
+- [ ] **Agentic inspection of the worst segment**: the scorer picks the single worst run, Gemini gets those counts' numbers
+      and a frame, explains, then one drill.
+- [ ] **Counterfactual ghost**: draw the caller's own skeleton nudged toward the corrected pose instead of the reference dancer.
+- [ ] **Metrics dashboard** for the per-call numbers already logged (time to choose, re-asks, unused answers, non-addressed
+      lines, longest silence, setup bounces, noise cancellation on/off).
+
+## 5. Verify with people (the things no simulator covers)
+
+- [ ] A FaceTime call that lands on the Chert line (§0).
+- [ ] A person through the full current flow in Chrome on a propped phone, whole body in frame (the last human runs
+      predate the mode cards, tracker, depth and noise work).
+- [ ] Squad with two to four real people; check tag swaps when crossing.
+- [ ] Gemini tool calls on a live call (watch the `tool` rows in the session JSONL); fallback `DANCE_TOOLS=0`.
+- [ ] The QR scanned on an iPhone opens FaceTime to the line.
+- [ ] Krisp BVC with a TV on in the room; "Was that a yes?" with a mumbled answer.
+- [ ] `DANCE_RTT` from a clap test on the first real call (default 0.3 s).
+- [ ] The eval harness alone on the laptop after each engine change (`run_eval --jobs 6`; it did not finish beside a live worker).
+- [ ] Pilot numbers during the week: first-timer completion, time to first dance, "would use again", cue relevance
+      (human review of `data/tmp/cue_review.csv`), share-funnel conversion (`GET /dance/funnel`).
+
+## 6. Content and data
+
+- [ ] **Own clean solo keys** of three trending moves, filmed front-on, whole body, steady BPM, with clean / late /
+      wrong-arm takes for §3.6. The single most valuable hour of filming.
+- [ ] Class-mode teacher keys as the growth path (every teacher who records a class grows the library, with consent).
+- [ ] PopDanceSet through `ingest.py` for younger-audience moves; AIST++ stays demo-only under its research terms.
+- [ ] A Pexels ingestion queue for reference variety (credit and link terms).
+- [ ] Library README with source and licence per key.
+
+## 7. Platform
+
+- [ ] A Mac for the line during the posting week; the Windows shim stays the fallback.
+- [ ] Multi-pose on a GPU box for squads (237 ms a frame here); keep solo defaults on laptops (`DANCE_MAX_POSES=1`, 320 px).
+- [ ] Live web room with browser-side pose (MediaPipe in each browser, landmarks over the data channel): live squads and
+      live classes on separate phones; we own the room, so no seat limit. A few days.
+- [ ] Process hygiene on Windows: worker and page server in their own windows, keep the restart loop, never run the agent
+      dispatch test while the line is live, close spare Chrome tabs.
+- [ ] Decide on the backend's home: it runs locally today (`db.py` has a `/tmp` branch for Vercel but nothing deploys it;
+      `team/docs/vercel-services.md` parked the two-service layout).
+- [ ] Chert outbound audio for reminders, if the project ever gets it; until then nothing leaves the call.
+
+## 8. Doc and code hygiene (each is minutes; from `CODEBASE.md` §13)
+
+- [ ] Root `README.md`: 14 tools (not 13), 164 tests (not 53), the starter diff is two files plus `requirements.txt`
+      (drop "per-call recordings"), the primary-dancer lock is in `tracker.py`.
+- [ ] `team/dance/README.md`: list all 14 tools; the lobby is CHOOSE; rules go to Gemini as background notes; rewrite the
+      Render and Audio sections for the current HUD and the one-voice rule; add the install line.
+- [ ] `team/README.md` and `backend/app.py` docstring: describe the `live.py` path, not `team/skill/handlers.py`; fill
+      "Who owns what".
+- [ ] `scoring.py` docstring: 20° half-marks, 18/32° verdicts, 0.35/0.6-beat windows.
+- [ ] `team/dance/__init__.py` docstring: add `setup`, `orient`, `tracker`, `addressed`, `answers`, `watchdog`.
+- [ ] `ingest_aist` default genres: add `KR JS` to match the shipped library.
+- [ ] Remove dead code: `live.py` `NUDGE_S`/`DANCE_NUDGE_S`, `MENU_LINE`, `MAX_ATTEMPTS`, `count_words()`; `render.py`'s
+      legacy layer (`draw_topbar`, `draw_timeline`, `draw_chips`, `draw_history`, `draw_combo`, `draw_menu`,
+      `draw_progress_row`, `draw_skeleton`, `to_portrait`); `multipose.py`'s duplicate helpers; `setup.py`'s `feet_cut`.
+- [ ] Add `scipy` to `requirements.txt` (used by `tracker.py`, `music.py`, `film/audio.py`, `film/score.py`).
+- [ ] Rebuilding keys with `IGNORE_FEET` on would blank the knee columns and silence `cues.count_cues` level/bounce;
+      either build keys with the flag off or make `count_cues` read the key's own mask.
+- [ ] Retire or archive `team/skill/`, `team/tests/`, `team/web/index.html`, `scripts/worker.*` (fitness era) or mark
+      them legacy in place.
+- [ ] Delete `team/scripts/submit_to_fork.ps1` / `.sh` and `team/docs/private-repo.md`; rewrite the repo section of
+      `team/README.md` for the single public repo.
+- [ ] `team/docs/decisions.md` still says "Idea: not picked yet"; add the dance decision and the date.
+- [ ] Delete `.venv_conda_broken` when convenient.
+
+## 9. Research path (after the product week)
+
+- [ ] GVHMR for world-grounded 3D motion recovery of uploads, then a 3D ghost.
+- [ ] V-JEPA 2.1 clip embeddings as a second scorer, compared on the §3.6 benchmark against joint angles and a fusion.
+- [ ] GMR humanoid retargeting demo ("learn a dance with Brodie, watch the robot attempt it").
+- [ ] A concept bottleneck (late extension, insufficient leg movement, inconsistent timing) feeding the cue and the Break Room.
+- [ ] Fitness and biohacking on the same engine (`MovementAssessment` interface, adaptive technique coach, Fitness Age /
+      Balance Age "Brodie's Lab"; see `team/docs/biohacking-angle.md`, `workout-pivots.md`).
