@@ -73,7 +73,7 @@ ivyhacks-brodie/
 │   │   ├── library/*.json    reference keys (AIST++ ones are git-ignored)
 │   │   ├── assets/brodie/    the official character kit + cream checker; assets/fonts/ (OFL)
 │   │   ├── voice/*.pcm       dormant local TTS lines
-│   │   ├── tests/            164 pytest cases;  eval/  scripted end-to-end sessions + HUD snapshots
+│   │   ├── tests/            165 pytest cases;  eval/  scripted end-to-end sessions + HUD snapshots
 │   ├── backend/              app.py (FastAPI routes, HTML pages, /join), db.py (Postgres or SQLite), dbcheck.py, import_sqlite.py, team.db (ignored)
 │   ├── cloud/                the cloud box: start.sh (API + worker, restart loops), requirements.txt, fetch_models.py, fetch_library.py, pack_library.py, README.md (the runbook)
 │   ├── web/                  phone.html (browser caller), groove/index.html (landing page), certs/ (ignored)
@@ -201,7 +201,7 @@ owner, rounds, bpm)`, `pack`/`unpack`, `valid` (delegates to `backend/db.valid_g
 `cc_street_girl` (Wikimedia Commons, tracked), `test_squats` (starter recording, tracked), `class_1771` (ignored).
 `gen_*`, `ghost_*`, `chain_*` keys are never saved here.
 
-### 3.2 The session: `live.py` (3845 lines)
+### 3.2 The session: `live.py` (3862 lines)
 
 The whole call. Module layout, in file order:
 
@@ -254,7 +254,9 @@ lines are dropped) and sends the new rules as a background note.
   `last_attempt_summary`, `tool_compare`, `queue_routine`, `profile_summary`, `tool_forget`, `squad_status`,
   `set_call_mode`, `assign_name`.
 - *Video:* `publish` (`coach-video`, no simulcast, 1.8 Mbit/s), `newest_frame` (reads `job.latest`), `prepare`/`_pose_sync`
-  (pose thread), `render_push`/`_render_sync`/`_encode_sync`.
+  (pose thread), `render_push`/`_render_sync`/`_encode_sync`. `_close_pose_sync` closes the MediaPipe landmarkers on the pose
+  thread: when the budget guard asks for `lite` (`pose_reload`) and when the call ends. Never leave them to the garbage
+  collector: MediaPipe's `__del__` → `close()` inside its own executor `submit` deadlocked the whole worker on 2026-10-12.
 - *Lifecycle:* `run`, `_frame_step`, `_guards`, `_dead_air_step`, `vad_listener`/`on_vad`/`barge_in` (2.5 s mic window over
   the music, ≤ 20 % of a phrase), `listen_buttons`, `register_tools`, `check_single_agent`, `reset_activity_state`, `guard`.
 
@@ -293,8 +295,10 @@ Gemini's `caller_answered` (0.75), hands up (1.0); `decide(conf, already_asked)`
 **`watchdog.py`** (83) — `DeadAir`: per-state silence limits (CHOOSE/EXPLORE/OFFER 25 s, PREPARE/CONFIRM 30 s, REVIEW 22 s),
 three nudge lines per state, gap doubling after three, `('end', ...)` after 300 s with nobody seen or heard.
 
-**`audio_in.py`** (72) — Krisp background-voice cancellation + AGC on the caller's audio into Gemini, by swapping
-`RoomOptions` during `GeminiModel.start`. `choose_nc` (auto only on `*.livekit.cloud`), `wrap_start`. Env: `DANCE_NC`
+**`audio_in.py`** (80) — Krisp background-voice cancellation + AGC on the caller's audio into Gemini, by swapping
+`RoomOptions` during `GeminiModel.start` for `patched_options(...)`, a **subclass** (AgentSession.start calls
+`RoomOptions._ensure_options` and checks `isinstance`; the plain function used until 2026-10-12 made Gemini fail to start on
+every real call while unit tests and the simulator passed). `choose_nc` (auto only on `*.livekit.cloud`), `wrap_start`. Env: `DANCE_NC`
 (auto|bvc|bvc_tel|off), `DANCE_AGC` (1). Needs `livekit-plugins-noise-cancellation` (`team/requirements.txt`).
 
 **`persona.md`** (72) — Gemini's system instruction: the hard rule (speak only to the caller, never narrate or mention
@@ -398,15 +402,16 @@ name hashed), `close`. The summary is POSTed to `/events` by `live.py`.
 
 ### 3.8 Tests, eval, offline tools
 
-**`tests/`** — 106 test functions, **164 collected cases** (`python -m pytest team/dance/tests -q`):
+**`tests/`** — 107 test functions, **165 collected cases** (`python -m pytest team/dance/tests -q`):
 `test_scoring` (8: selftest, DTW identity, degradations, engine states, freestyle), `test_ingest` (2), `test_handedness` (2:
 mirror convention, cue names the caller's own side), `test_modules` (16: progression, choreo, feedback, gestures, telemetry,
 tracker, text/fx), `test_modules2` (10: cues, style vocab, ghost, addressed, answers, noise cancellation, pacing, guards,
-screens), `test_orient` (5), `test_tracker` (5: crossings, re-ID, walk-ins, children, crowd), `test_phase1` (9: codes vs
+screens; the `RoomOptions` swap survives `_ensure_options`), `test_orient` (5), `test_tracker` (5: crossings, re-ID, walk-ins, children, crowd), `test_phase1` (9: codes vs
 count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (7: FastAPI
-`TestClient` on a temp DB: codes/duels, chains, classes, profiles, boards/funnel, forget me, metrics), `test_live` (42
-functions, 100 cases: `classify` phrasings, flow, speaker queue, offers, space/ready waits, tools guarded, buttons, portrait
-canvas, cards, kit compliance, photo card + QR, modes, pose step, depth cues, layered cues).
+`TestClient` on a temp DB: codes/duels, chains, classes, profiles, boards/funnel, forget me, metrics), `test_live` (43
+functions, 101 cases: `classify` phrasings, flow, speaker queue, offers, space/ready waits, tools guarded, buttons, portrait
+canvas, cards, kit compliance, photo card + QR, modes, pose step, depth cues, layered cues, the lite-model swap closing the old
+landmarker on the pose thread).
 
 **`eval/run_eval.py`** (358) — 46 scripted scenarios (+ a runtime `duel`) through `live --simulate` in parallel with named
 checks (`long_chat`, `choose_*`, `offer_needs_yes`, `learn_lobby`, `patient_*`, `space_*`, `real_*` with realistic timing,
@@ -452,7 +457,9 @@ connection with an explicit transaction per call, pinged after 60 s idle and reo
 tests that set `TEAM_DB` or reassign `DB_PATH` always get SQLite, so a test can never write to the real database). Every query
 is written in the shared dialect: `?` placeholders (`_PgConn` rewrites to `%s`), `INSERT ... ON CONFLICT` upserts, JSON in
 TEXT, epoch seconds in REAL; `_ddl()` turns `INTEGER PRIMARY KEY` into `BIGSERIAL` and `REAL` into `DOUBLE PRECISION` for
-Postgres. `_Row` makes psycopg rows behave like `sqlite3.Row`. `ping()` backs `/health`.
+Postgres. `_Row` makes psycopg rows behave like `sqlite3.Row`. `ping()` backs `/health`. Rollback is one env var: unset
+`DATABASE_URL` and everything is back on the SQLite file (nothing SQLite-side was removed; only the old Vercel `/tmp` default
+went, and a cloud marker now refuses SQLite instead). Locally `.env.local` has no `DATABASE_URL`, so the laptop runs on SQLite.
 
 **`dbcheck.py`** (33) — round trip against the configured engine (init, write, read, award, forget me). **`import_sqlite.py`**
 (44) — one-time copy of a `team.db` into Postgres (`ON CONFLICT DO NOTHING`, serial counters moved past the imported ids).
@@ -483,7 +490,7 @@ and `dance_loop.ps1` use this; with `DATABASE_URL` set the in-process copy also 
 
 | Script | Does |
 |---|---|
-| `chrome.ps1` | The one-command Chrome test: starts `serve_web.py` (https :8443) and the worker if missing, mints a room via `mint_link.py`, opens Chrome or prints the Android short link. Flags `-Demo` (demo room, no gates), `-Restart`, `-Record`, `-Android`, `-Key`, `-Mode`, `-Code`, `-MinVisible`, `-Rtt`. Defaults `DANCE_MAX_POSES=1`, `DANCE_POSE_PX=320`, `BACKEND_URL=fake` |
+| `chrome.ps1` | The one-command Chrome test: starts `serve_web.py` (https :8443) and the worker if missing (under `AGENT_NAME` from `.env.local`, empty = automatic: the same name `mint_link.py` puts in the token), mints a room via `mint_link.py`, opens Chrome or prints the Android short link. Flags `-Demo` (demo room, no gates), `-Restart`, `-Record`, `-Android`, `-Key`, `-Mode`, `-Code`, `-MinVisible`, `-Rtt`. Defaults `DANCE_MAX_POSES=1`, `DANCE_POSE_PX=320`, `BACKEND_URL=fake` |
 | `dance.ps1` / `dance.sh` | The dance worker (command in section 2). `-AgentName` for the Chert line, `-Key`, `-Mode`, `-Debug <mp4>`, `-Tempo`, `-Rtt`, `-NoVoice` |
 | `dance_loop.ps1` | The same under a restart loop (LiveKit's native library can panic on Windows when a room is deleted mid-connect); `-MaxPoses 4` for squads; stop file `data/tmp/worker_stop` |
 | `chert.ps1` / `chert.sh` + `chert_win_shim.js` | Run the Chert CLI on Windows (unsupported upstream): the shim reports `linux`, fakes the 0600/uid credential check, and skips directory fsync (EPERM on Windows). `chert.ps1 doctor`, `chert.ps1 dev --agent <name>` |
@@ -689,7 +696,7 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 
 ## 13. Known mismatches between docs and code (fix the doc or the code; list kept here until done)
 
-- Root `README.md` says 13 Gemini tools and 53 tests; the code has **14 tools** and **164 collected tests**.
+- Root `README.md` says 13 Gemini tools and 53 tests; the code has **14 tools** and **165 collected tests**.
   `team/dance/README.md` lists 11 tools (misses `propose_activity`, `confirm_start`, `caller_answered`).
 - Root `README.md` says the starter is unchanged except "a Windows signal guard, a Gemini instruction prefix, per-call
   recordings"; the diff is two files (guard, prefix) plus `requirements.txt`. Recordings are ours (`telemetry.py`, `DANCE_DEBUG_MP4`).
@@ -700,8 +707,6 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 - `team/README.md` and `backend/app.py`'s docstring describe the `team/skill/handlers.py` path; the live path is `live.py`.
 - `publish_site.ps1` copies `team\web\site` (gone); the `.sh` copies `team/web/groove`. Vercel is the live host anyway.
 - `link_local.ps1` mints with `facetime.mint_token` (no dispatch); comments elsewhere say it uses `mint_link.py`.
-- `chrome.ps1` starts a worker with `--agent-name=` but `mint_link.py` adds a dispatch whenever `AGENT_NAME` is set in
-  `.env.local`; in that combination a fresh automatic worker never gets the room (use `-Restart` with the name, or unset).
 - Two `vercel.json` files with different roots (root: `team/web/groove`; `team/`: `web/groove`) so either Vercel root works.
 - `BACKEND_URL=off` means "in-process DB" in `live.py` but "no forwarding" in the legacy `skill/handlers.py`.
 - `setup.py` carries a `feet_cut` issue that `evaluate()` never emits (feet are ignored by design).
@@ -712,8 +717,15 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 - `promo/clips.py` Day 4 expects `data/tmp/promo/vo/{hype,chill,coach}.wav`; no script in the tree writes them.
 - `scipy` is imported by `music.py`, `film/audio.py`, `film/score.py`, `tracker.py` (optional); it is in `team/cloud/requirements.txt`
   but still not in the root `requirements.txt`.
-- The cloud box (`team/cloud/`) has not been deployed yet: `nixpacks.toml` and `railway.json` are written from the Nixpacks and
-  Railway docs, not from a green build. The first deploy may need a tweak; remove this line once `/health` answers from Railway.
+- The cloud box (`team/cloud/`) has not been deployed yet: `nixpacks.toml`, `railway.json` and `start.sh` are written from the
+  Nixpacks and Railway docs, not from a green build. The first deploy may need a tweak; remove this line once `/health` answers
+  from Railway. The Postgres engine itself is verified against a local Postgres 17 (2026-10-12: `dbcheck.py`, the 7
+  `test_backend` cases, the ghost-token / forget-me / 30-day-expiry checks, `import_sqlite.py` run twice on a copy of `team.db`);
+  Supabase's transaction pooler is not yet tried.
+- `chrome_test.py` reads `--worker-log` as UTF-8; a log written by Windows PowerShell's `*>` redirect is UTF-16 and shows "(none)".
+  `chrome.ps1`'s worker logs only to its own window, so the default `worker_dance5.log` is usually stale.
+- `livekit-local-inference` is stubbed in this `.venv` (its native module crashed on load), so `live.vad_listener` dies at the
+  start of every call (logged, not fatal): no local VAD barge-in over the music on this laptop.
 
 ---
 

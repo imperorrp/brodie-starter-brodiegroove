@@ -29,7 +29,8 @@ class), `-Facing user|environment`, `-MinVisible 0.6` (whole-body phone test), `
 
 While the worker runs under the Chert dispatch name (`dance_loop.ps1 -AgentName ...`), a Chrome room only reaches it when the
 link carries that dispatch. `chrome.ps1` and `link_local.ps1` do this automatically through `team/scripts/mint_link.py` (it
-reads `AGENT_NAME` from `.env.local`); the old `facetime/mint_token.py` links will not.
+reads `AGENT_NAME` from `.env.local`); the old `facetime/mint_token.py` links will not. When `chrome.ps1` has to start a worker
+itself, it starts it under that same `AGENT_NAME` (empty = automatic dispatch), so the room and the worker always match.
 
 `.\team\scripts\chrome.ps1 -Demo` names the room `demo-desk-...`: Brodie skips the chat, the offer and the ready check and
 goes straight from the camera check into one routine (good for filming), and the camera check is arms-only on the laptop.
@@ -116,7 +117,8 @@ LiveKit library on Windows (the loop restarts it, but a call in that moment woul
 Then FaceTime video-call the line's address (on the assignment card) from a phone; Terminal A prints `bound to 'chert-bridge-...' 1280x720` when the call
 lands. Hang up, Ctrl-C Terminal B and wait for "Stopped" to release the line. Signed in already (`chert whoami`); to sign in
 again: `.\team\scripts\chert.ps1 login --device` and enter the code at https://facetime.trychert.com/cli. With the worker on
-the dispatch name, the Chrome page's automatic dispatch does not pick it up: `.\team\scripts\chrome.ps1 -Restart` swaps back.
+the dispatch name, `chrome.ps1` rooms reach it too (same `AGENT_NAME` in the token); `.\team\scripts\chrome.ps1 -Restart` replaces
+it with a worker under the same name.
 
 ## The same path with nobody on camera
 

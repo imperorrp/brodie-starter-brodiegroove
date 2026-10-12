@@ -83,10 +83,13 @@ def test_room_options_patch_restores_and_upgrades(monkeypatch):
         async def start(self):
             from livekit.agents.voice.room_io import RoomOptions
             seen['opts'] = RoomOptions(audio_input=True)
+            # what AgentSession.start does with it; a function in place of the class broke Gemini's start on real calls
+            seen['ensured'] = rio.RoomOptions._ensure_options(seen['opts'])
     monkeypatch.setenv('DANCE_NC', 'off'); monkeypatch.setenv('DANCE_AGC', '1')
     orig = rio.RoomOptions
     asyncio.run(audio_in.wrap_start(Dummy.start)(Dummy()))
     assert rio.RoomOptions is orig
+    assert seen['ensured'] is seen['opts'] and isinstance(seen['opts'], orig)
     ai = seen['opts'].audio_input
     assert ai is not True and getattr(ai, 'auto_gain_control', None) is True
 

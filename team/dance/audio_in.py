@@ -47,6 +47,17 @@ def audio_input_options(kind=None, agc=None):
     return AudioInputOptions(**kw) if kw else True
 
 
+def patched_options(Orig, opts):
+    """A RoomOptions subclass that turns audio_input=True into opts. A subclass, not a function: AgentSession.start calls
+    room_io.RoomOptions._ensure_options(...) and checks isinstance(options, RoomOptions); a plain function broke Gemini's start."""
+    class Patched(Orig):
+        def __init__(self, *pa, **pk):
+            if pk.get('audio_input') is True and opts is not True: pk['audio_input'] = opts
+            super().__init__(*pa, **pk)
+    Patched.__name__ = Patched.__qualname__ = Orig.__name__
+    return Patched
+
+
 def wrap_start(orig_start):
     """GeminiModel.start, with the caller's audio input upgraded (falls back to the original options on any error)."""
     async def start(self, *a, **kw):
@@ -60,10 +71,7 @@ def wrap_start(orig_start):
         STATUS.update(nc=kind or 'off', reason=why, agc=bool(opts is not True and getattr(opts, 'auto_gain_control', False) is True))
         print(f"[dance] caller audio: noise cancellation {kind or 'off'} ({why}), gain control {'on' if STATUS['agc'] else 'off'}", flush=True)
 
-        def Patched(*pa, **pk):
-            if pk.get('audio_input') is True and opts is not True: pk['audio_input'] = opts
-            return Orig(*pa, **pk)
-        rio.RoomOptions = Patched
+        rio.RoomOptions = patched_options(Orig, opts)
         try:
             return await orig_start(self, *a, **kw)
         finally:

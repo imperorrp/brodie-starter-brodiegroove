@@ -49,6 +49,29 @@ def _session():
     return s, clock, log
 
 
+def test_budget_swap_closes_pose_model_on_pose_thread(monkeypatch):
+    """The lite swap closes the old landmarker itself, on the pose thread; left to the garbage collector, MediaPipe's __del__
+    deadlocked the whole worker (2026-10-12)."""
+    import time
+    from team.dance import multipose
+    class FakePose:
+        made = []
+        def __init__(self, variant='full', video=True, max_poses=4): self.variant = variant; self.closed = 0; FakePose.made.append(self)
+        def __call__(self, rgb, ms): return []
+        def close(self): self.closed += 1
+    monkeypatch.setattr(multipose, 'MultiPose', FakePose)
+    s, clock, log = _session()
+    rgb = np.zeros((48, 64, 3), np.uint8)
+    s._pose_sync(rgb, 0); old = s.mpose
+    s.now = time.monotonic; s.budget.add = lambda *a: 'lite'
+    s._guards(1.0, None, None, None)
+    assert s.pose_variant == 'lite' and s.pose_reload and s.mpose is old and old.closed == 0     # nothing dropped on the loop thread
+    s._pose_sync(rgb, 40)
+    assert old.closed == 1 and s.mpose is not old and s.mpose.variant == 'lite' and not s.pose_reload
+    s._close_pose_sync()
+    assert FakePose.made[-1].closed == 1 and s.mpose is None
+
+
 def test_voice_event_flow_and_dedupe():
     s, clock, log = _session()
     s.on_worker_event(dict(type='voice', role='caller', text="Hi I'm Maya, I like pop, chill coach please, easy"))

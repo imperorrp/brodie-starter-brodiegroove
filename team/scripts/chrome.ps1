@@ -37,10 +37,11 @@ else {
   $env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'
   if (-not $env:BACKEND_URL) { $env:BACKEND_URL = 'fake' }
   if ($Code) { $env:DANCE_CODE = $Code } else { Remove-Item env:DANCE_CODE -ErrorAction SilentlyContinue }
+  # Same dispatch name mint_link.py puts in the token (AGENT_NAME from .env.local; empty = automatic), or the room never reaches this worker.
   $args = @('-u', '-m', 'team.dance.run_worker', '--perception', 'off', '--voice', 'gemini', '--persona', 'team\dance\persona.md', '--handlers', 'team\dance\live.py',
-            '--plan-file', 'team\dance\plan.txt', '--log-caller', '--audio-queue-ms', '300', '--agent-name=', 'dev')
+            '--plan-file', 'team\dance\plan.txt', '--log-caller', '--audio-queue-ms', '300', "--agent-name=$($env:AGENT_NAME)", 'dev')
   Start-Process -FilePath $py -ArgumentList $args -WorkingDirectory $root
-  "worker: started in a new window (key $Key, mode $Mode, min visible $MinVisible$(if ($Code) { ", code $Code" })). Wait for 'registered worker' there."
+  "worker: started in a new window (key $Key, mode $Mode, min visible $MinVisible, dispatch $(if ($env:AGENT_NAME) { $env:AGENT_NAME } else { 'automatic' })$(if ($Code) { ", code $Code" })). Wait for 'registered worker' there."
   Start-Sleep -Seconds 12
 }
 

@@ -3,7 +3,7 @@
 Ranked. `[ ]` open, `[~]` started, `[x]` done, `[!]` blocked. Tick things here; write the story of how in `../PROGRESS.md`;
 when a tick changes what works, update `STATUS.md`; when it changes a file's role, update `CODEBASE.md`.
 Sources folded in: `PLANNED_IMPROVEMENTS.md`, `team/docs/AUDIT_2026-10-11.md`, `CONVERSATION.md` §8,
-`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-11 late evening ET.
+`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-12, 17:05 ET.
 
 The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every engineering item below should earn a post.
 
@@ -13,7 +13,8 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
 - [x] Sunday LinkedIn post tagging Brodie and Chert (the entry ticket) (2026-10-11).
 - [x] Public repo `imperorrp/ivyhacks-brodiegroove` up to date; it is the only repo from now on (2026-10-11 22:16 ET).
 - [~] **Put Brodie in the cloud so no laptop has to stay on** (`team/cloud/README.md`). Code is in (2026-10-11 23:15 ET);
-      left to do, in order: (1) Supabase project → `DATABASE_URL` → `python team/backend/dbcheck.py` green; (2)
+      the Postgres engine passed dbcheck, `test_backend`, the ghost/expiry checks and `import_sqlite` (twice) on a local
+      Postgres 17 (2026-10-12); SQLite stays the default, so unsetting `DATABASE_URL` rolls back. Left to do, in order: (1) Supabase project → `DATABASE_URL` → `python team/backend/dbcheck.py` green; (2)
       `python team/cloud/pack_library.py` → private bucket → `DANCE_LIBRARY_URL`; (3) Railway service from this repo with
       the env pasted in → `/health` says `postgres`; (4) `/join?prefix=demo-desk` from a phone gets a scored phrase; (5) put
       the `/join` link on the landing page and set `JOIN_KEY`; (6) the Chert slot dispatches to the cloud worker. Remove the
@@ -61,8 +62,16 @@ Wrapped" card. Keep battle, telephone and class as spoken words that work, not a
       facts); gate by Gemini minutes (240 per team on the relay).
 - [ ] **Memory across calls**: store the last three weak counts and the last cue in the profile; open the next call with
       "last time count six got you".
-- [ ] **Fix `chrome.ps1` dispatch mismatch**: it starts a worker with `--agent-name=` while `mint_link.py` adds a dispatch
-      whenever `AGENT_NAME` is set in `.env.local`; pass the name through or unset it for the Chrome path.
+- [x] **Fix `chrome.ps1` dispatch mismatch**: the worker now starts under `AGENT_NAME`, the name `mint_link.py` puts in the
+      token (2026-10-12).
+- [ ] **Install `livekit-plugins-noise-cancellation` in `.venv`** (`uv pip install -r team/requirements.txt`): every call logs
+      "noise cancellation off (plugin not installed)", so Krisp has never run here.
+- [ ] **`vad_listener` on a stubbed `livekit-local-inference`**: it raises at the start of every call ("Task exception was
+      never retrieved"); either get the native module loading again or catch it once and log "barge-in off".
+- [ ] **`chrome_test.py` log reading**: accept UTF-16 logs (PowerShell's `*>`), and have `chrome.ps1` tee its worker to
+      `data/tmp/worker_chrome.log` so the test and a human can read the same log.
+- [ ] **Postgres in the test run**: an opt-in `TEST_DATABASE_URL` that runs `test_backend` and the db checks of
+      `test_phase1` on Postgres too (done by hand on 2026-10-12 against a local Postgres 17; keep it from regressing).
 - [ ] **`publish_site.ps1`** copies `team\web\site` (gone); point it at `team\web\groove` like the `.sh`.
 - [ ] **`link_local.ps1`** should mint through `mint_link.py` (named dispatch, `.go_url`) as the comments claim.
 - [ ] **Install note** in both READMEs: `uv pip install -r requirements.txt -r team/requirements.txt` (pillow, segno and
@@ -117,7 +126,10 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
 - [ ] A person through the full current flow in Chrome on a propped phone, whole body in frame (the last human runs
       predate the mode cards, tracker, depth and noise work).
 - [ ] Squad with two to four real people; check tag swaps when crossing.
-- [ ] Gemini tool calls on a live call (watch the `tool` rows in the session JSONL); fallback `DANCE_TOOLS=0`.
+- [~] Gemini tool calls on a live call (watch the `tool` rows in the session JSONL); fallback `DANCE_TOOLS=0`.
+      `propose_activity` and `confirm_start` seen ok on a human Chrome call (2026-10-12); the other 12 not yet.
+- [ ] **Before any post or demo: `chrome_test.py` headless, then check the newest `data/tmp/sessions/*.jsonl` for
+      `speech_dropped`.** Real-call-only bugs (Gemini start, the pose-model deadlock) passed every unit test and eval scenario.
 - [ ] The QR scanned on an iPhone opens FaceTime to the line.
 - [ ] Krisp BVC with a TV on in the room; "Was that a yes?" with a mumbled answer.
 - [ ] `DANCE_RTT` from a clap test on the first real call (default 0.3 s).
@@ -151,7 +163,7 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
 
 ## 8. Doc and code hygiene (each is minutes; from `CODEBASE.md` §13)
 
-- [ ] Root `README.md`: 14 tools (not 13), 164 tests (not 53), the starter diff is two files plus `requirements.txt`
+- [ ] Root `README.md`: 14 tools (not 13), 165 tests (not 53), the starter diff is two files plus `requirements.txt`
       (drop "per-call recordings"), the primary-dancer lock is in `tracker.py`.
 - [ ] `team/dance/README.md`: list all 14 tools; the lobby is CHOOSE; rules go to Gemini as background notes; rewrite the
       Render and Audio sections for the current HUD and the one-voice rule; add the install line.

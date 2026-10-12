@@ -502,7 +502,8 @@ class DanceSession:
         self.engine = None; self.phrase = 0; self.attempts = 0; self.round = 0; self.rounds = []; self.name = None
         self.code = os.environ.get('DANCE_CODE') or None          # a four-digit code the caller spoke (duel or chain to join)
         self.my_code = None; self.backend = Backend()
-        self.pending_cmd = None; self.stop = False; self.pose = None; self.mpose = None; self.exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix='dance-pose')
+        self.pending_cmd = None; self.stop = False; self.pose = None; self.mpose = None; self.pose_reload = False
+        self.exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix='dance-pose')
         self.source = None; self.writer = None; self.last_seq = -1; self.frames = 0; self.pose_ms = []
         self.last_lm = None; self.log = []; self.t0 = None; self.published = False
         self.mirror_view = (os.environ.get('DANCE_MIRROR_VIEW', '1') or '1').strip().lower() in ('1', 'true', 'yes', 'on')
@@ -1477,7 +1478,21 @@ class DanceSession:
         self.frames += 1
 
     # ---- pose: several people, one primary ----
+    def _close_pose_sync(self):
+        """Pose thread: close the landmarkers ourselves. Left to the garbage collector, MediaPipe's __del__ -> close() can run inside
+        one of its own ThreadPoolExecutor.submit calls (which holds the global executor lock) and deadlock the whole worker: video,
+        voice and the job all froze on 2026-10-12 after the budget guard dropped the full model. close() is idempotent, so the later
+        __del__ does nothing."""
+        for m in (self.mpose, self.pose):
+            try:
+                if m is not None: m.close()
+            except Exception as e:
+                print(f'[dance] pose close: {e!r}', flush=True)
+        self.mpose = None; self.pose = None
+
     def _pose_sync(self, rgb, ms):
+        if self.pose_reload:                                 # the budget guard asked for another model: close the old one here, on this thread
+            self.pose_reload = False; self._close_pose_sync()
         if self.mpose is None and self.pose is None:
             try:
                 from team.dance.multipose import MultiPose
@@ -1569,6 +1584,8 @@ class DanceSession:
             if self.source is not None and hasattr(self.source, 'aclose'):
                 try: await asyncio.wait_for(self.source.aclose(), 1.0)
                 except Exception as e: print(f'[dance] video source close: {e!r}', flush=True)
+            try: self.exec.submit(self._close_pose_sync)        # after any frame still in flight; never left to the garbage collector
+            except RuntimeError: pass
             self.exec.shutdown(wait=False)
             if self.pose_ms: print(f'[dance] pose {np.median(self.pose_ms):.0f} ms median over {len(self.pose_ms)} frames; {self.frames} frames composed', flush=True)
             self.telemetry.mode = self.mode
@@ -2264,7 +2281,7 @@ class DanceSession:
             ms = (time.perf_counter() - getattr(self, '_frame_t0', time.perf_counter())) * 1000.0
             step = self.budget.add(now, ms) if self.now is time.monotonic else None
             if step == 'lite' and self.pose_variant != 'lite':
-                self.pose_variant = 'lite'; self.mpose = None; self.pose = None; self.telemetry.event('budget', step='lite', ms=round(ms, 1))
+                self.pose_variant = 'lite'; self.pose_reload = True; self.telemetry.event('budget', step='lite', ms=round(ms, 1))   # swapped on the pose thread
                 print('[dance] frames over budget: lite pose model', flush=True)
             elif step == 'fps12' and self.fps > 12:
                 self.fps = 12.0; self.telemetry.event('budget', step='fps12'); print('[dance] frames over budget: 12 fps', flush=True)

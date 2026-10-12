@@ -144,7 +144,7 @@ up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
 | The phone moves or falls mid-try | the whole picture jumps (phase correlation on a tiny frame; a dancer moving only changes part of it): "Looks like the phone moved. Let's check the camera." (unscored) |
 | A bright window behind the caller | the person is much darker than the picture: "There's bright light behind you. Turn so the window or lamp is in front of you." |
 | Someone falls | torso flat and low for 2 s during the music: the routine pauses, "Whoa, everyone okay?" |
-| Slow computer | frames over 55 ms for 5 s: the lite pose model, then 12 fps (`guards.FrameBudget`) |
+| Slow computer | frames over 55 ms for 5 s: the lite pose model, then 12 fps (`guards.FrameBudget`); the swap closes the old model on the pose thread (left to the garbage collector it deadlocked the worker: frozen video, silent Brodie, until 2026-10-12) |
 
 ## 7. Other edge cases
 
