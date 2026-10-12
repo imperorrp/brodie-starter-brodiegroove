@@ -54,6 +54,7 @@ def _free_old_codes(c):
                                    (cut, 'challenge_start', cut, cut)).fetchall()]
     for code in old:
         for t in ('dance_ghosts', 'dance_ghost_tokens', 'dance_shares'): c.execute(f'DELETE FROM {t} WHERE code = ?', (code,))
+        c.execute('UPDATE dance_results SET challenge = NULL WHERE challenge = ?', (code,))     # its crew board doesn't pass to the next owner
         c.execute('UPDATE dance_results SET code = NULL WHERE code = ?', (code,))
 
 
@@ -63,7 +64,7 @@ def _new_code(c, table):
     for _ in range(200):
         code = f'{random.randint(1000, 9999)}'
         if all(c.execute(f'SELECT 1 FROM {t} WHERE code = ?', (code,)).fetchone() is None
-               for t in CODE_TABLES + ('dance_ghosts', 'dance_ghost_tokens', 'dance_shares')): return code   # never a code something still points at
+               for t in CODE_TABLES + ('dance_ghosts', 'dance_ghost_tokens')): return code   # never a code a ghost or token still points at
     raise RuntimeError('no free code')
 
 
@@ -351,8 +352,13 @@ def delete_user(name):
 
 # ---- shares and challenges: how codes spread ----
 def log_share(code, kind):
+    """Count a share event, only for a code that exists right now (the endpoint is open, so rows for made-up codes would wait
+    for whoever gets that code next)."""
+    code = str(code)
     with _lock, _conn() as c:
-        c.execute('INSERT INTO dance_shares (code, kind, t) VALUES (?, ?, ?)', (str(code), kind, _time.time()))
+        if not any(c.execute(f'SELECT 1 FROM {t} WHERE code = ?', (code,)).fetchone() for t in CODE_TABLES): return False
+        c.execute('INSERT INTO dance_shares (code, kind, t) VALUES (?, ?, ?)', (code, kind, _time.time()))
+    return True
 
 
 def share_count(code, kind='challenge_start'):

@@ -143,3 +143,4 @@ def test_freed_codes_take_their_ghost_and_history_with_them(tmp_path):
     with db._conn() as c:
         assert c.execute('SELECT 1 FROM dance_ghost_tokens WHERE code = ?', (old,)).fetchone() is None
         assert c.execute('SELECT 1 FROM dance_shares WHERE code = ?', (old,)).fetchone() is None
+    assert db.log_share('0000', 'challenge_start') is False                                  # no rows for codes that don't exist
