@@ -12,6 +12,12 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
 - [x] Submission issue opened on `seraphimlabs-dev/brodie-starter` (2026-10-11).
 - [x] Sunday LinkedIn post tagging Brodie and Chert (the entry ticket) (2026-10-11).
 - [x] Public repo `imperorrp/ivyhacks-brodiegroove` up to date; it is the only repo from now on (2026-10-11 22:16 ET).
+- [~] **Put Brodie in the cloud so no laptop has to stay on** (`team/cloud/README.md`). Code is in (2026-10-11 23:15 ET);
+      left to do, in order: (1) Supabase project → `DATABASE_URL` → `python team/backend/dbcheck.py` green; (2)
+      `python team/cloud/pack_library.py` → private bucket → `DANCE_LIBRARY_URL`; (3) Railway service from this repo with
+      the env pasted in → `/health` says `postgres`; (4) `/join?prefix=demo-desk` from a phone gets a scored phrase; (5) put
+      the `/join` link on the landing page and set `JOIN_KEY`; (6) the Chert slot dispatches to the cloud worker. Remove the
+      "not deployed" line from `CODEBASE.md` §13 when (3) is green.
 - [ ] **Log every post** at getbrodie.com/ivyhacks (resubmit with the same team name each time).
 - [ ] **Retire `team/docs/demo-and-posting.md`**; its checklist is stale and its plan is "_tbd_". `team/promo/STRATEGY.md`
       is the plan now; keep one source.
@@ -136,8 +142,11 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
       live classes on separate phones; we own the room, so no seat limit. A few days.
 - [ ] Process hygiene on Windows: worker and page server in their own windows, keep the restart loop, never run the agent
       dispatch test while the line is live, close spare Chrome tabs.
-- [ ] Decide on the backend's home: it runs locally today (`db.py` has a `/tmp` branch for Vercel but nothing deploys it;
-      `team/docs/vercel-services.md` parked the two-service layout).
+- [x] Decide on the backend's home: Supabase Postgres behind the same FastAPI, deployed with the worker on Railway
+      (`team/cloud/`; the Vercel two-service idea in `team/docs/vercel-services.md` is dropped). Deployment itself: §0.
+- [ ] Cloud follow-ups once the box is live: Realtime on the crew board, an Open Graph card per code (Tue's post), share
+      links with a `source` on `dance_shares`, a `sessions` table (one row per call) for the traction chart, pg_cron for the
+      30-day expiry, a second worker container when calls overlap (state is already off the disk).
 - [ ] Chert outbound audio for reminders, if the project ever gets it; until then nothing leaves the call.
 
 ## 8. Doc and code hygiene (each is minutes; from `CODEBASE.md` §13)

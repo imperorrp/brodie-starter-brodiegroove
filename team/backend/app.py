@@ -1,29 +1,82 @@
-"""Team backend: receives Brodie events from team/skill/handlers.py and keeps state in SQLite.
+"""Team backend: the dance session (team/dance/live.py, class Backend) posts results, profiles, chains, classes and session
+summaries here; the board pages and the browser caller are served from here too. State lives in Postgres (Supabase,
+DATABASE_URL) when deployed, SQLite for tests and the simulator (db.py).
 
-Run (repo root, venv active):  python -m uvicorn app:app --app-dir team/backend --port 8787
+Run locally (repo root, venv active):  python -m uvicorn app:app --app-dir team/backend --port 8787
+Deployed: team/cloud/start.sh runs it next to the worker (team/cloud/README.md).
 Endpoints:
-  GET  /health              liveness
+  GET  /health              liveness + which database engine and whether it answers
+  GET  /join                mint a one-hour room token and open phone.html (the no-laptop way to call Brodie from a browser)
+  GET  /phone.html          the browser caller (team/web/phone.html)
   POST /events              one event (the dance session posts its session_summary here)
   GET  /events/recent       the last N events, newest first
-  GET  /sessions/last       reps per exercise for the most recent call (events grouped by a gap of SESSION_GAP_S)
+  GET  /sessions/last       reps per exercise for the most recent call (events grouped by a gap of SESSION_GAP_S; fitness era)
   Dance: POST /dance/result (duels on score100, crew boards), GET /dance/result/{code}, /dance/leaderboard, /dance/history,
          /dance/profile/{name} (GET; POST .../award, .../prefs; DELETE = forget me), POST /dance/share/{code}/start,
          GET /dance/funnel, /dance/board/{code}[/page], chains, classes, GET /dance (board page), GET /metrics
 """
+import datetime, os, re, secrets, time
+from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 import db
 
 SESSION_GAP_S = 120          # events more than this far apart belong to different calls
+_HERE = os.path.dirname(os.path.abspath(__file__))
+PHONE_PAGE = os.path.join(os.path.dirname(_HERE), 'web', 'phone.html')
+CLOUD_MARKERS = ('REQUIRE_DATABASE_URL', 'RAILWAY_PROJECT_ID', 'RENDER', 'FLY_APP_NAME', 'VERCEL')
 app = FastAPI(title='team backend')
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])   # team/web pages call it from anywhere
-db.init()
+
+
+def _startup():
+    """Create the tables. Deployed (any CLOUD_MARKERS env var set) the engine must be Postgres: a cloud box with a SQLite file
+    would lose every code on the next restart, so refuse to start instead. A pooler that is slow to answer gets a few retries."""
+    if db.engine() != 'postgres' and any(os.environ.get(k) for k in CLOUD_MARKERS):
+        raise SystemExit('[backend] DATABASE_URL is not set (or TEAM_DB is): the deployed backend runs on Postgres only (team/cloud/README.md)')
+    for attempt in range(5):
+        try:
+            db.init(); print(f'[backend] database: {db.engine()}', flush=True); return
+        except Exception as e:
+            if attempt == 4: raise
+            print(f'[backend] database init failed ({e!r}); retrying in 3 s', flush=True); time.sleep(3)
+
+
+_startup()
 
 
 @app.get('/health')
 def health():
-    return {'ok': True}
+    return {'ok': True, 'db': db.engine(), 'db_ok': db.ping()}
+
+
+# ---- the browser caller, minted here so no laptop is needed: GET /join opens phone.html with a fresh room token ----
+@app.get('/join')
+def join(prefix: str = 'dance', facing: str = 'user', k: str = None):
+    """Mint a one-hour token for a new room and redirect to /phone.html. Room-name prefixes the session understands: `demo-`
+    (one routine, no chat gates), `desk-` (arms-only camera check), `demo-desk-`. With AGENT_NAME set the token carries a
+    dispatch for that worker (the same default as the worker, so the two always match). JOIN_KEY, when set, must come as ?k=."""
+    key = os.environ.get('JOIN_KEY')
+    if key and k != key: return JSONResponse({'error': 'not allowed'}, status_code=403)
+    if not all(os.environ.get(v) for v in ('LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET')):
+        return JSONResponse({'error': 'LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET are not set on the backend'}, status_code=503)
+    from livekit import api
+    prefix = re.sub(r'[^a-z0-9-]', '', (prefix or '').lower()).strip('-')[:24] or 'dance'
+    room = f"{prefix}-{time.strftime('%m%d-%H%M%S')}-{secrets.token_hex(2)}"
+    identity = f'web-{secrets.token_hex(3)}'
+    agent = os.environ.get('AGENT_NAME', 'brodie-coach')       # facetime/worker.py's default; '' = automatic dispatch
+    t = (api.AccessToken(os.environ['LIVEKIT_API_KEY'], os.environ['LIVEKIT_API_SECRET']).with_identity(identity).with_name(identity)
+         .with_ttl(datetime.timedelta(hours=1))
+         .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True, can_publish_data=True)))
+    if agent: t = t.with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(agent_name=agent)]))
+    q = dict(url=os.environ['LIVEKIT_URL'], token=t.to_jwt(), facing=facing if facing in ('user', 'environment') else 'user')
+    return RedirectResponse('/phone.html?' + urlencode(q), status_code=302)
+
+
+@app.get('/phone.html')
+def phone_page():
+    return FileResponse(PHONE_PAGE, media_type='text/html')
 
 
 @app.post('/events')

@@ -108,7 +108,8 @@ team/
     telemetry.py      per-session JSONL, metrics
     audio.py          metronome, count-in, sound effects
     tests/, eval/     53 tests; scripted end-to-end sessions; HUD snapshots
-  backend/          FastAPI + SQLite: results and codes, duels, chains, classes, profiles, boards, share funnel, metrics
+  backend/          FastAPI + Postgres (Supabase; SQLite for tests): results and codes, duels, chains, classes, profiles, boards, share funnel, metrics, /join
+  cloud/            the always-on box: worker + backend in one container on Railway, no Docker (README.md there is the runbook)
   web/              phone.html (any browser as the caller), groove/ (the landing page)
   scripts/          one-command runners: chrome.ps1, dance_loop.ps1, chert.ps1 (Chert CLI on Windows), mint_link.py, chrome_test.py
   CHROME_TEST_GUIDE.md   how to test from Chrome on a laptop or Android, and on the Chert line
@@ -124,7 +125,9 @@ copy .env.example .env.local                                            # LiveKi
 ```
 
 Open the link, allow camera and mic, tap Join. `-Demo` skips the chat gates and goes straight from the camera check into one
-routine; without it the full flow runs. The repo ships the Creative Commons keys; the AIST++ basic-move keys the generated
+routine; without it the full flow runs. To run it in the cloud instead (Supabase for the database, Railway for the worker and
+the backend, nothing on a laptop) follow [`team/cloud/README.md`](team/cloud/README.md); `https://<your box>/join` then
+opens the same browser caller for anyone. The repo ships the Creative Commons keys; the AIST++ basic-move keys the generated
 routines draw on are not redistributed (research terms): download `keypoints3d.zip` from the AIST++ release into `data/aist/`
 and run `python -m team.dance.ingest_aist` once (about a minute). `python -m team.dance.live --simulate clip.mp4 --mode learn --lobby --say "3:I'm Maya"
 --say "9:teach me hip hop" --say "20:ready"` runs the same code without LiveKit and writes what the caller would have seen.

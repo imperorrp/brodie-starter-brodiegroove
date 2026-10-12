@@ -1,41 +1,140 @@
-"""SQLite storage for the team backend: raw events, dance results with four-digit codes, telephone chains, classes, player
-profiles (XP, level, streak, achievements, preferences, keyed by a spoken first name), and share/challenge tracking."""
-import json, os, sqlite3, threading
+"""Storage for the team backend: raw events, dance results with four-digit codes, telephone chains, classes, player profiles
+(XP, level, streak, achievements, preferences, keyed by a spoken first name), and share/challenge tracking.
+
+Two engines behind one module, chosen by engine():
+  - Postgres (Supabase) when DATABASE_URL is set: the deployed backend (team/cloud/). One persistent connection, re-opened when
+    it drops; autocommit with an explicit transaction per call; no prepared statements, so the Supabase transaction pooler works.
+  - SQLite otherwise: the test suite, the simulator and eval (they set TEAM_DB or assign DB_PATH, which also wins over
+    DATABASE_URL so a test can never write to the real database).
+Every query is written once, in the dialect both engines share: `?` placeholders (rewritten to %s for Postgres), INSERT ...
+ON CONFLICT upserts, JSON in TEXT columns, epoch seconds in REAL columns. init() translates the DDL (serial ids, double precision).
+"""
+import json, os, re, sqlite3, threading, time as _time
+from contextlib import contextmanager
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-# TEAM_DB overrides. On Vercel the package directory is read-only, so the default moves to /tmp (ephemeral: resets on a
-# cold start and is not shared between instances; a hosted database is the real fix for a public deployment).
-DB_PATH = os.environ.get('TEAM_DB') or (os.path.join('/tmp', 'team.db') if os.environ.get('VERCEL') else os.path.join(_HERE, 'team.db'))
+DATABASE_URL = (os.environ.get('DATABASE_URL') or '').strip()
+_DEFAULT_DB_PATH = os.path.join(_HERE, 'team.db')
+DB_PATH = os.environ.get('TEAM_DB') or _DEFAULT_DB_PATH        # SQLite file: TEAM_DB, else team/backend/team.db; tests reassign it
 _lock = threading.Lock()
+_pg = None                                                     # the one Postgres connection (guarded by _lock like everything else)
+_pg_used = 0.0
+PG_IDLE_PING_S = 60                                            # after this long idle, ping before use (the pooler drops idle clients)
 
 
-def _conn():
-    c = sqlite3.connect(DB_PATH, check_same_thread=False); c.row_factory = sqlite3.Row
+def engine():
+    """'postgres' when DATABASE_URL is set and nothing asked for a SQLite file (TEAM_DB, or DB_PATH reassigned by a test), else 'sqlite'."""
+    return 'postgres' if DATABASE_URL and not os.environ.get('TEAM_DB') and DB_PATH == _DEFAULT_DB_PATH else 'sqlite'
+
+
+class _Row:
+    """A Postgres row that behaves like sqlite3.Row: r['col'], r[0], dict(r), `for (a, b) in rows`."""
+    __slots__ = ('_k', '_v')
+
+    def __init__(self, keys, values): self._k = keys; self._v = tuple(values)
+    def __getitem__(self, i): return self._v[i] if isinstance(i, int) else self._v[self._k.index(i)]
+    def __iter__(self): return iter(self._v)
+    def __len__(self): return len(self._v)
+    def keys(self): return list(self._k)
+    def get(self, k, default=None): return self._v[self._k.index(k)] if k in self._k else default
+
+
+def _row_factory(cursor):
+    keys = [d.name for d in cursor.description] if cursor.description else []
+    return lambda values: _Row(keys, values)
+
+
+class _PgConn:
+    """The psycopg connection with sqlite's calling convention: execute(sql with ? placeholders, params) -> cursor."""
+    def __init__(self, c): self.c = c
+    def execute(self, sql, params=()): return self.c.execute(sql.replace('?', '%s'), params)
+
+
+def _pg_connect():
+    global _pg, _pg_used
+    import psycopg
+    _pg = psycopg.connect(DATABASE_URL, row_factory=_row_factory, autocommit=True, prepare_threshold=None, connect_timeout=10,
+                          keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
+    _pg_used = _time.time()
+    return _pg
+
+
+def _pg_conn():
+    """The persistent connection: re-opened if it closed or broke, or if a ping fails after PG_IDLE_PING_S idle."""
+    global _pg_used
+    c = _pg
+    if c is None or c.closed or c.broken: c = _pg_connect()
+    elif _time.time() - _pg_used > PG_IDLE_PING_S:
+        try: c.execute('SELECT 1').fetchone()
+        except Exception:
+            try: c.close()
+            except Exception: pass
+            c = _pg_connect()
+    _pg_used = _time.time()
     return c
+
+
+@contextmanager
+def _conn():
+    """One transaction: `with _lock, _conn() as c:` then c.execute(...). Commits on success, rolls back on an exception."""
+    if engine() == 'postgres':
+        c = _pg_conn()
+        with c.transaction(): yield _PgConn(c)
+    else:
+        c = sqlite3.connect(DB_PATH, check_same_thread=False); c.row_factory = sqlite3.Row
+        try:
+            with c: yield c
+        finally:
+            c.close()
+
+
+def ping():
+    """True when a trivial query works (GET /health reports it)."""
+    try:
+        with _lock, _conn() as c: return c.execute('SELECT 1').fetchone()[0] == 1
+    except Exception as e:
+        print(f'[db] ping failed: {e!r}', flush=True); return False
+
+
+_DDL = (
+    'CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, type TEXT, t_wall REAL, body TEXT)',
+    'CREATE INDEX IF NOT EXISTS events_t ON events (t_wall)',
+    'CREATE TABLE IF NOT EXISTS dance_results (id INTEGER PRIMARY KEY, code TEXT UNIQUE, name TEXT, key TEXT, mode TEXT, total REAL, rounds TEXT, '
+    'created REAL, score100 REAL, challenge TEXT)',
+    'CREATE INDEX IF NOT EXISTS dance_results_key_mode ON dance_results (key, mode, created)',
+    'CREATE INDEX IF NOT EXISTS dance_results_challenge ON dance_results (challenge)',
+    'CREATE TABLE IF NOT EXISTS dance_chains (id INTEGER PRIMARY KEY, code TEXT UNIQUE, key TEXT, links TEXT, created REAL)',
+    'CREATE TABLE IF NOT EXISTS dance_classes (id INTEGER PRIMARY KEY, code TEXT UNIQUE, teacher TEXT, key TEXT, students TEXT, created REAL)',
+    'CREATE TABLE IF NOT EXISTS dance_profiles (name_key TEXT PRIMARY KEY, display_name TEXT, xp INTEGER, level INTEGER, streak INTEGER, '
+    'last_day TEXT, styles TEXT, achievements TEXT, prefs TEXT, created REAL, updated REAL)',
+    'CREATE TABLE IF NOT EXISTS dance_shares (id INTEGER PRIMARY KEY, code TEXT, kind TEXT, t REAL)',
+    'CREATE INDEX IF NOT EXISTS dance_shares_code ON dance_shares (code, kind)',
+    # a battle winner's dance as body points (never video), only with their yes: friends with the code battle it (30 days)
+    'CREATE TABLE IF NOT EXISTS dance_ghosts (code TEXT PRIMARY KEY, name TEXT, src_key TEXT, bpm REAL, per_beat INTEGER, '
+    'data TEXT, total REAL, score100 REAL, difficulty TEXT, created REAL)',
+    # the one-time token that lets the caller who earned a code save their ghost under it (returned only to them by post_result)
+    'CREATE TABLE IF NOT EXISTS dance_ghost_tokens (code TEXT PRIMARY KEY, token TEXT, created REAL)',
+)
+
+
+def _ddl(stmt):
+    """The shared DDL in the engine's dialect: Postgres gets BIGSERIAL ids and DOUBLE PRECISION for REAL."""
+    if engine() == 'postgres':
+        stmt = stmt.replace('INTEGER PRIMARY KEY', 'BIGSERIAL PRIMARY KEY'); stmt = re.sub(r'\bREAL\b', 'DOUBLE PRECISION', stmt)
+    return stmt
 
 
 def init():
     with _lock, _conn() as c:
-        c.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, type TEXT, t_wall REAL, body TEXT)')
-        c.execute('CREATE INDEX IF NOT EXISTS events_t ON events (t_wall)')
-        c.execute('CREATE TABLE IF NOT EXISTS dance_results (id INTEGER PRIMARY KEY, code TEXT UNIQUE, name TEXT, key TEXT, mode TEXT, total REAL, rounds TEXT, created REAL)')
-        c.execute('CREATE TABLE IF NOT EXISTS dance_chains (id INTEGER PRIMARY KEY, code TEXT UNIQUE, key TEXT, links TEXT, created REAL)')
-        c.execute('CREATE TABLE IF NOT EXISTS dance_classes (id INTEGER PRIMARY KEY, code TEXT UNIQUE, teacher TEXT, key TEXT, students TEXT, created REAL)')
-        c.execute('CREATE TABLE IF NOT EXISTS dance_profiles (name_key TEXT PRIMARY KEY, display_name TEXT, xp INTEGER, level INTEGER, streak INTEGER, '
-                  'last_day TEXT, styles TEXT, achievements TEXT, prefs TEXT, created REAL, updated REAL)')
-        c.execute('CREATE TABLE IF NOT EXISTS dance_shares (id INTEGER PRIMARY KEY, code TEXT, kind TEXT, t REAL)')
-        # a battle winner's dance as body points (never video), only with their yes: friends with the code battle it (30 days)
-        c.execute('CREATE TABLE IF NOT EXISTS dance_ghosts (code TEXT PRIMARY KEY, name TEXT, src_key TEXT, bpm REAL, per_beat INTEGER, '
-                  'data TEXT, total REAL, score100 REAL, difficulty TEXT, created REAL)')
-        # the one-time token that lets the caller who earned a code save their ghost under it (returned only to them by post_result)
-        c.execute('CREATE TABLE IF NOT EXISTS dance_ghost_tokens (code TEXT PRIMARY KEY, token TEXT, created REAL)')
-        cols = {r[1] for r in c.execute('PRAGMA table_info(dance_results)').fetchall()}
-        if 'score100' not in cols: c.execute('ALTER TABLE dance_results ADD COLUMN score100 REAL')
-        if 'challenge' not in cols: c.execute('ALTER TABLE dance_results ADD COLUMN challenge TEXT')
+        for stmt in _DDL: c.execute(_ddl(stmt))
+        if engine() == 'sqlite':                                # SQLite files made before score100 / challenge existed
+            cols = {r[1] for r in c.execute('PRAGMA table_info(dance_results)').fetchall()}
+            if 'score100' not in cols: c.execute('ALTER TABLE dance_results ADD COLUMN score100 REAL')
+            if 'challenge' not in cols: c.execute('ALTER TABLE dance_results ADD COLUMN challenge TEXT')
 
 
 # ---- dance: results with four-digit codes (async duels), telephone chains ----
-import random, time as _time
+import random
 
 
 CODE_TABLES = ('dance_results', 'dance_chains', 'dance_classes')
@@ -297,8 +396,8 @@ def get_profile(name):
 
 
 def _ensure_profile(c, key, display, now, prefs=None):
-    c.execute('INSERT OR IGNORE INTO dance_profiles (name_key, display_name, xp, level, streak, last_day, styles, achievements, prefs, created, updated) '
-              'VALUES (?, ?, 0, 0, 0, NULL, ?, ?, ?, ?, ?)', (key, display, '[]', '[]', json.dumps(prefs or {}), now, now))
+    c.execute('INSERT INTO dance_profiles (name_key, display_name, xp, level, streak, last_day, styles, achievements, prefs, created, updated) '
+              'VALUES (?, ?, 0, 0, 0, NULL, ?, ?, ?, ?, ?) ON CONFLICT (name_key) DO NOTHING', (key, display, '[]', '[]', json.dumps(prefs or {}), now, now))
 
 
 def award(name, xp, style=None, achievements=(), day=None, session=None):
@@ -424,7 +523,9 @@ def post_result(b):
     if code and b.get('mode') == 'battle':                       # only this caller can attach a ghost to the code
         import secrets
         tok = secrets.token_urlsafe(16)
-        with _lock, _conn() as c: c.execute('INSERT OR REPLACE INTO dance_ghost_tokens (code, token, created) VALUES (?, ?, ?)', (code, tok, _time.time()))
+        with _lock, _conn() as c:
+            c.execute('INSERT INTO dance_ghost_tokens (code, token, created) VALUES (?, ?, ?) ON CONFLICT (code) DO UPDATE SET token = excluded.token, '
+                      'created = excluded.created', (code, tok, _time.time()))
         out['ghost_token'] = tok
     if ch:
         if opp is not None:

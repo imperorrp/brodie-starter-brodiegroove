@@ -4,8 +4,8 @@ What exists, how far each piece has been verified, and what has shipped. Update 
 something changes state; the dated narrative belongs in `../PROGRESS.md` (private), the ranked work in `TODO.md`, the
 file map in `CODEBASE.md`.
 
-**As of 2026-10-11, about 22:45 ET.** The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
-the submission is in. The judged window is the posting week, **Mon Oct 12 to Sun Oct 18**: the winner is the entry with
+**As of 2026-10-11, about 23:15 ET.** The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
+the submission is in. The cloud box (Supabase + Railway, `team/cloud/`) is written and unit-checked but not yet deployed. The judged window is the posting week, **Mon Oct 12 to Sun Oct 18**: the winner is the entry with
 the most social traction, so everything from here is "one feature, one post, each day".
 
 ## 1. Repo, submission, shipping
@@ -18,6 +18,7 @@ the most social traction, so everything from here is "one feature, one post, eac
 | Sunday LinkedIn post tagging Brodie and Chert (the entry ticket) | **done** |
 | Post log at getbrodie.com/ivyhacks | not confirmed; log every post of the week there |
 | Landing page | live at https://brodiegroove.vercel.app/ (Vercel, static from `team/web/groove`); gh-pages is the fallback |
+| Cloud box: worker + API on Railway, Postgres on Supabase (`team/cloud/README.md`) | **code ready, not deployed.** `db.py` runs on Postgres when `DATABASE_URL` is set (SQLite otherwise, unchanged), `app.py` gained `/join` and a DB-aware `/health`, `start.sh` runs both processes under restart loops, `nixpacks.toml` + `railway.json` build it without Docker. Needs: a Supabase project (`DATABASE_URL`), the AIST key zip on a private URL (`DANCE_LIBRARY_URL`), a Railway service with the env pasted in. First green build pending |
 | Waitlist | Google Form wired to every Call button (`WAITLIST_URL` in `groove/index.html`) |
 | Promo kit | built (`team/promo`), `config.json` has `call_line` and `call_url` empty, so every CTA still says "THE LINE OPENS MON 10.12" |
 | Pitch video / film | pipelines built; outputs live under `data/tmp/pitch/` and `data/tmp/film/` on this laptop only |
@@ -43,7 +44,7 @@ webcam) → **Chert line held** (`chert dev` connected from Windows) → **FaceT
 | 14 Gemini function tools backed by the session | `tools.py` | unit (every tool refuses to start a dance) + sim; **live tool calls on a real call unverified** (`DANCE_TOOLS=0` is the fallback) |
 | Video: ghost on the body + panel, state chips, count tiles, verdict pops, reveals, recap, mode cards, setup view, breaks, boards, photo scorecard with code tiles and QR, kit avatar, portrait for Chert / landscape for a webcam, safe area | `render.py`, `text.py`, `fx.py`, `avatar.py`, `screens.py` | unit + 20 HUD snapshots + headless and human Chrome; kit compliance passes `check_cream.py`; compose 10–15 ms |
 | Game layer: grades, titles, XP, levels, unlocks, achievements, streaks, coach styles | `progression.py`, backend profiles | unit + sim |
-| Backend: codes (unique, freed after 30 days with their ghost/token/shares), results, boards, funnel, profiles, chains, classes, ghosts, metrics, HTML pages | `backend/app.py`, `db.py` | unit (`test_backend`, 7) + sim via the in-process fake; no auth; runs locally |
+| Backend: codes (unique, freed after 30 days with their ghost/token/shares), results, boards, funnel, profiles, chains, classes, ghosts, metrics, HTML pages, `/join` (mints the browser caller's room) | `backend/app.py`, `db.py`, `dbcheck.py`, `import_sqlite.py` | unit (`test_backend`, 7, SQLite) + sim via the in-process fake + `/join`, `/phone.html`, `/health` and the cloud guard checked with the test client; the Postgres engine is written and its helpers unit-checked, **never run against a real Supabase yet** (`dbcheck.py` is the check); no auth |
 | Browser caller (any Chrome, Android), one-command test, headless test, named dispatch via `mint_link.py`, demo rooms | `web/phone.html`, `scripts/chrome.ps1`, `chrome_test.py`, `serve_web.py` | headless PASS (14:55 and 17:30 ET) + human runs |
 | Chert line from Windows | `scripts/chert.ps1` + `chert_win_shim.js` | `chert doctor` green, `chert dev --agent dance-battle-agent-ivyhacks` connected, warm room held (16:12 ET). **No FaceTime call has landed on our worker** (the Mac behind the line did not answer; the slot then went to another team) |
 | Telemetry per call, `GET /metrics`, eval report, cue review CSV | `telemetry.py`, `eval/run_eval.py` | in place; eval needs the laptop to itself |
@@ -66,6 +67,7 @@ Counts at the last pass: 164 pytest cases (106 functions, 10 files), 46 eval sce
 4. **`DANCE_CALL_HANDLE` is unset**, so the scorecard has no QR, which is the share mechanic. Zero code to fix.
 5. Squad colour tags can still swap when dancers cross fast; more than four people are told to cheer.
 6. The backend has no auth; identity is the first name a caller says. Fine for a local demo, not for the open internet.
+   Once deployed, `GET /join` can open rooms (and spend Gemini minutes) for anyone who has the link: set `JOIN_KEY`.
 7. AIST++ keys are research-licensed derivatives: git-ignored, rebuilt locally with `ingest_aist`, never redistributed.
 8. True barge-in while Brodie talks is not there (the echo guard drops the caller's audio; only the music has a window).
 9. Gemini quirks seen on build day: stray quote characters as a line, narration (now suppressed by the persona's hard
@@ -82,7 +84,7 @@ Counts at the last pass: 164 pytest cases (106 functions, 10 files), 46 eval sce
 | Eval | `data/tmp/eval_report.json`, `data/tmp/cue_review.csv`, `data/tmp/eval/<scenario>.{json,mp4,log}` |
 | HUD snapshots | `data/tmp/hud/*.png` |
 | Promo, pitch, film | `data/tmp/promo/`, `data/tmp/pitch/`, `data/tmp/film/` |
-| Backend DB | `team/backend/team.db` (eval uses `data/tmp/eval/eval_team.db`) |
+| Backend DB | `team/backend/team.db` (eval uses `data/tmp/eval/eval_team.db`); deployed: Supabase Postgres (`DATABASE_URL`), browsable in the Supabase table editor |
 | Chert | `~/.chert/dev/<binding>/` journal; `data/tmp/chert_dev.log` |
 
 ## 5. How to check the state quickly

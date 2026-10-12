@@ -1,0 +1,14 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "nixpacksConfigPath": "nixpacks.toml",
+    "watchPatterns": ["team/**", "facetime/**", "src/**", "nixpacks.toml", "railway.json", "requirements.txt"]
+  },
+  "deploy": {
+    "startCommand": "bash team/cloud/start.sh",
+    "restartPolicyType": "ALWAYS",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 600
+  }
+}

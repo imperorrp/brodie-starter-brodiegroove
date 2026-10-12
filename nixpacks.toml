@@ -1,0 +1,20 @@
+# Railway build (builder NIXPACKS, see railway.json) for the cloud box: the worker + backend API from team/cloud/start.sh.
+# The root requirements.txt is the laptop set (torch with CUDA on Linux, research extras); the box installs CPU torch and
+# team/cloud/requirements.txt instead. libgl1/libglib2.0-0: opencv-contrib-python (a mediapipe dependency) needs them.
+providers = ["python"]
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.12"
+PYTHONUNBUFFERED = "1"
+PYTHONUTF8 = "1"
+
+[phases.setup]
+aptPkgs = ["libgl1", "libglib2.0-0"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install --upgrade pip && pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install -r team/cloud/requirements.txt && python team/cloud/fetch_models.py",
+]
+
+[start]
+cmd = "bash team/cloud/start.sh"
