@@ -125,8 +125,10 @@ def test_friend_code_loads_the_saved_ghost(tmp_path):
     assert any(k.get('has_ghost') for k in db.resolve_code(won['code'])['kinds'])
     asyncio.run(s.load_challenge(won['code']))
     assert s.queued_key['name'] == f"ghost_{won['code']}" and s.challenge.get('ghost') and "Maya's ghost" == s.queued_key['title']
+    db.log_share(won['code'], 'challenge_start')
     db.delete_user('Maya')
     assert db.get_ghost(won['code']) is None                                           # "forget me" deletes the ghost too
+    assert db.share_count(won['code']) == 0                                            # ...and the code's history (it may be reissued)
 
 
 def test_freed_codes_take_their_ghost_and_history_with_them(tmp_path):

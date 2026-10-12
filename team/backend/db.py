@@ -53,9 +53,15 @@ def _free_old_codes(c):
                                    '(SELECT code FROM dance_shares WHERE kind = ? AND t > ?) AND code NOT IN (SELECT code FROM dance_ghosts WHERE created >= ?)',
                                    (cut, 'challenge_start', cut, cut)).fetchall()]
     for code in old:
-        for t in ('dance_ghosts', 'dance_ghost_tokens', 'dance_shares'): c.execute(f'DELETE FROM {t} WHERE code = ?', (code,))
-        c.execute('UPDATE dance_results SET challenge = NULL WHERE challenge = ?', (code,))     # its crew board doesn't pass to the next owner
+        _release_code(c, code)
         c.execute('UPDATE dance_results SET code = NULL WHERE code = ?', (code,))
+
+
+def _release_code(c, code):
+    """Everything keyed by a code that is going away (its ghost, the ghost's token, its share log, the challenger links to it), so
+    whoever gets the code next starts clean. Used when codes expire and when "forget me" deletes results."""
+    for t in ('dance_ghosts', 'dance_ghost_tokens', 'dance_shares'): c.execute(f'DELETE FROM {t} WHERE code = ?', (code,))
+    c.execute('UPDATE dance_results SET challenge = NULL WHERE challenge = ?', (code,))
 
 
 def _new_code(c, table):
@@ -339,6 +345,7 @@ def delete_user(name):
     with _lock, _conn() as c:
         out['profile'] = c.execute('DELETE FROM dance_profiles WHERE name_key = ?', (key,)).rowcount
         out['ghosts'] = c.execute('DELETE FROM dance_ghosts WHERE lower(name) = ?', (key,)).rowcount
+        for (code,) in c.execute('SELECT code FROM dance_results WHERE lower(name) = ? AND code IS NOT NULL', (key,)).fetchall(): _release_code(c, code)
         out['results'] = c.execute('DELETE FROM dance_results WHERE lower(name) = ?', (key,)).rowcount
         for table, col, label in (('dance_chains', 'links', 'chains'), ('dance_classes', 'students', 'classes')):
             for r in c.execute(f'SELECT code, {col} FROM {table}').fetchall():
