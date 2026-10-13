@@ -265,13 +265,45 @@ def test_avatar_is_kit_compliant():
     from team.dance import avatar as A
     tools = os.path.join(ROOT, 'team', 'dance', 'assets', 'brodie', 'tools')
     paths = []
-    for v in ('grin', 'closed', 'sleepy'):
+    names = ['grin', 'closed', 'sleepy'] + [A.variant_for(m, mo) for m in A.MOODS if m != 'happy' for mo in ('grin', 'closed')]
+    for v in names:                                                          # every mood frame stays canon cream
         p = os.path.join(tempfile.gettempdir(), f'brodie_{v}.png'); cv2.imwrite(p, A.sprite(v, 600)); paths.append(p)
     r = subprocess.run([sys.executable, 'check_cream.py'] + paths, cwd=tools, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     img = np.zeros((300, 300, 3), np.uint8)
-    for st in A.BrodieAvatar.STATES: A.avatar().draw(img, 150, 150, 200, st, 0.3)
+    for st in A.BrodieAvatar.STATES:
+        for m in A.MOODS: A.avatar().draw(img, 150, 150, 200, st, 0.3, mood=m)
     assert img.sum() > 0
+    av = A.avatar()
+    assert av.variant('idle', 0.0, 'pumped') == 'pumped_grin' and av.variant('idle', 0.0, 'focus') == 'focus_closed'
+    assert av.variant('offline', 0.0, 'pumped') == 'sleepy' and av.variant('idle', 0.0, 'happy') == 'grin'   # offline wins; happy = the old art
+    assert A.sprite('focus_grin', 200).tobytes() != A.sprite('grin', 200).tobytes()       # the face really changed
+
+
+def test_mood_follows_verdicts_scores_and_style():
+    s, clock, log = _session()
+    assert s.cur_mood(0.0) == 'happy'                                        # hype (default): happy at rest
+    eng = type('E', (), {'state': 'attempt'})()
+    assert s.cur_mood(0.0, eng) == 'focus'                                   # watching the caller dance
+    for b in range(4): s.on_engine_event(dict(type='beat', beat=b, live_verdict='green'))
+    assert s.cur_mood(clock['t']) == 'pumped'                                # a PERFECT streak of four
+    clock['t'] = 10.0; assert s.cur_mood(clock['t']) == 'happy'              # reactions expire
+    s.on_engine_event(dict(type='beat', beat=0, live_verdict='red')); s.on_engine_event(dict(type='beat', beat=1, live_verdict='red'))
+    assert s.cur_mood(clock['t']) == 'encourage'                             # two misses in a row
+    clock['t'] = 20.0; s.mood_for_score(78.0); assert s.cur_mood(clock['t']) == 'pumped'        # hype: 75 is big
+    s.persona = 'chill'; s.mood_for_score(78.0); assert s.cur_mood(clock['t']) == 'happy'       # chill: only 92+
+    s.mood_for_score(40.0); assert s.cur_mood(clock['t']) == 'encourage'
+    s.persona = 'coach'; clock['t'] = 40.0; assert s.cur_mood(clock['t']) == 'focus'            # COACH rests on focus
+
+
+def test_scorecard_qr_opens_the_result_page(monkeypatch):
+    from team.dance import render as R
+    monkeypatch.delenv('DANCE_PUBLIC_URL', raising=False)
+    assert R.qr_payload('brodie@x.com', '4821') == 'facetime:brodie@x.com' and R.qr_payload(None, '4821') is None
+    monkeypatch.setenv('DANCE_PUBLIC_URL', 'https://b.example.app/')
+    assert R.qr_payload('brodie@x.com', '4821') == 'https://b.example.app/r/4821'                # the page has the FaceTime button
+    assert R.qr_payload('brodie@x.com', None) == 'facetime:brodie@x.com'
+    assert R.mood_for_grade('S') == 'pumped' and R.mood_for_grade('D') == 'encourage' and R.mood_for_grade(None) == 'happy'
 
 
 def test_photo_card_and_safe_area():

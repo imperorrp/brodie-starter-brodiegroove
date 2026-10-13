@@ -104,6 +104,24 @@ def test_forget_me(client):
     assert client.get(f"/dance/chain/{ch['code']}").json()['links'][0]['name'] == 'anonymous'
 
 
+def test_result_page_and_preview_card(client, monkeypatch):
+    import io
+    from PIL import Image
+    monkeypatch.setenv('DANCE_PUBLIC_URL', 'https://b.example.app'); monkeypatch.setenv('DANCE_CALL_HANDLE', 'brodie@example.com')
+    a = client.post('/dance/result', json=dict(name='Maya', key='k', mode='learn', total=94, rounds=[])).json()
+    v0 = client.get('/dance/funnel').json()['page_views']
+    page = client.get(f"/r/{a['code']}")
+    assert page.status_code == 200
+    t = page.text
+    assert f"og:image' content='https://b.example.app/r/{a['code']}/og.png'" in t and "twitter:card' content='summary_large_image'" in t
+    assert 'Maya scored 94 (S)' in t and "href='facetime:brodie@example.com'" in t and f"battle {a['code']}" in t
+    assert client.get('/dance/funnel').json()['page_views'] == v0 + 1
+    png = client.get(f"/r/{a['code']}/og.png")
+    assert png.headers['content-type'] == 'image/png' and Image.open(io.BytesIO(png.content)).size == (1200, 630)
+    assert client.get('/r/0000').status_code == 404 and client.get('/r/abcd/og.png').status_code == 404
+    assert client.get('/dance/funnel').json()['page_views'] == v0 + 1          # unknown codes and the image fetch don't count
+
+
 def test_metrics(client):
     for done in (True, False):
         client.post('/events', json=dict(type='session_summary', t_wall=1.0, completed=done, tracking_rate=0.95, median_cue_latency_ms=400.0, tool_calls=4, tool_errors=1))

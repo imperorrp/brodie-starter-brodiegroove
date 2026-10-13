@@ -10,8 +10,16 @@ States (driven by real signals in live.py): idle (slow breathing bob), listening
 speaking (mouth alternates about 7 times a second while his audio plays), thinking (three dots while a line is being prepared),
 offline (both eyes closed, "sleepy", when the voice isn't available). This is a speaking animation, not phoneme lip-sync.
 
-  av = avatar()                                  # one shared instance
-  av.draw(img_bgr, cx, cy, height_px, state, t)  # draws on a dark bubble with the state ring
+Moods (live.py sets one from the last verdict, score, grade and coach style; the kit's "yours to change: expression, pose"):
+  happy      the sit-wave art as drawn: wink + grin (the default)
+  pumped     the kit's own flex pose (brodie-flex.png): PERFECT streaks, big scores, S/A, a K.O.
+  focus      both eyes open, brow bars lowered toward the middle, closed smile: watching you dance, the COACH style
+  encourage  both eyes open, brow bars raised in the middle, closed smile: after misses and low scores ("you've got this")
+Open eyes are solid ink ovals the size of his open eye; brows stay thick ink bars; mouths stay the grin or the closed smile. Every
+feature edit erases one ink stroke (found as the dark component nearest its measured centre) with canon cream and redraws it in ink.
+
+  av = avatar()                                        # one shared instance
+  av.draw(img_bgr, cx, cy, height_px, state, t, mood)  # draws on a dark bubble with the state ring
 """
 import math, os
 from functools import lru_cache
@@ -27,14 +35,62 @@ CROP = (110, 0, 1000, 1110)                                 # head + waving arm 
 MOUTH = (546, 512, 192, 102)                                 # centre x, y and radii over the grin (source pixels)
 LEFT_EYE = (389, 367, 52, 70)
 LINE = 15                                                   # the kit's outline weight at this scale
+# The sit-wave face, measured on the kit file (dark components): brow bars, the open eye, the wink (his other eye).
+FACE_BOX = (300, 180, 780, 450)
+L_BROW_C, R_BROW_C, WINK_C = (375, 228), (686, 301), (688, 368)
+OPEN_EYE = (688, 370, 44, 64)                               # an open eye where the wink was: the left eye's size (88 x 128)
+BROW_W = 32                                                 # the brow bars' thickness
+BROWS = dict(focus=(((326, 252), (430, 270)), ((640, 270), (744, 252))),       # inner ends down: locked in
+             encourage=(((326, 270), (430, 250)), ((640, 250), (744, 270))))   # inner ends up: soft, "you've got this"
+FLEX_ART = os.path.join(HERE, 'assets', 'brodie', 'brodie-flex.png')
+FLEX_CROP = (150, 0, 1470, 1240)                            # head, both flexed arms, the BRODIE lettering
+FLEX_MOUTH = (840, 570, 210, 110)                           # over the flex grin (outline 677..1004 x 501..649, corners included)
+MOODS = ('happy', 'pumped', 'focus', 'encourage')
+
+
+def _closed_mouth(im, mouth, k=1.0):
+    """The kit's small closed smile in place of the grin: cream over the grin, one ink arc in the kit's line weight."""
+    d = ImageDraw.Draw(im); cx, cy, rx, ry = mouth
+    d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=CREAM + (255,))
+    d.arc((cx - 82 * k, cy - 70 * k, cx + 82 * k, cy + 40 * k), start=25, end=155, fill=INK + (255,), width=LINE)
+    return im
+
+
+def _erase_stroke(im, centre, box=FACE_BOX, grow=6):
+    """Paint canon cream over the one ink stroke nearest `centre` (grown a few pixels for its anti-aliased edge), never over a
+    neighbouring stroke (the head or hand outline)."""
+    a = np.array(im); x0, y0, x1, y1 = box; sub = a[y0:y1, x0:x1]
+    dark = ((sub[:, :, :3].max(axis=2) < 90) & (sub[:, :, 3] > 200)).astype(np.uint8)
+    n, lab, _, cen = cv2.connectedComponentsWithStats(dark, 8)
+    if n < 2: return im
+    i = 1 + int(np.argmin([(cx + x0 - centre[0]) ** 2 + (cy + y0 - centre[1]) ** 2 for cx, cy in cen[1:]]))
+    m = cv2.dilate((lab == i).astype(np.uint8), np.ones((2 * grow + 1, 2 * grow + 1), np.uint8)).astype(bool)
+    m &= ~((lab > 0) & (lab != i))
+    sub[m] = CREAM + (255,)
+    return Image.fromarray(a)
+
+
+def _bar(d, p, q, w=BROW_W):
+    """A thick ink bar with round ends (the kit's brow)."""
+    d.line((p, q), fill=INK + (255,), width=w)
+    for x, y in (p, q): d.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=INK + (255,))
+
+
+def _open_face(base, brows):
+    """Both eyes open (the wink becomes an oval like the other eye) with the given brow bars."""
+    im = base
+    lx, ly = LEFT_EYE[:2]                                    # the new eye takes the open eye's own ink, so the pair matches
+    eye_ink = tuple(int(v) for v in np.median(np.asarray(base)[ly - 12:ly + 12, lx - 12:lx + 12, :3].reshape(-1, 3), axis=0))
+    for c in (L_BROW_C, R_BROW_C, WINK_C): im = _erase_stroke(im, c)
+    d = ImageDraw.Draw(im); ex, ey, rx, ry = OPEN_EYE
+    d.ellipse((ex - rx, ey - ry, ex + rx, ey + ry), fill=eye_ink + (255,))
+    for p, q in brows: _bar(d, p, q)
+    return im
 
 
 def _variants():
     base = Image.open(ART).convert('RGBA')
-    closed = base.copy(); d = ImageDraw.Draw(closed)
-    cx, cy, rx, ry = MOUTH
-    d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=CREAM + (255,))
-    d.arc((cx - 82, cy - 70, cx + 82, cy + 40), start=25, end=155, fill=INK + (255,), width=LINE)
+    closed = _closed_mouth(base.copy(), MOUTH)
     sleepy = closed.copy(); d2 = ImageDraw.Draw(sleepy)
     ex, ey, erx, ery = LEFT_EYE
     d2.ellipse((ex - erx, ey - ery, ex + erx, ey + ery), fill=CREAM + (255,))
@@ -42,7 +98,18 @@ def _variants():
     out = {}
     for name, im in (('grin', base), ('closed', closed), ('sleepy', sleepy)):
         out[name] = im.crop(CROP)
+    for mood in ('focus', 'encourage'):
+        face = _open_face(base.copy(), BROWS[mood])
+        out[f'{mood}_grin'] = face.crop(CROP); out[f'{mood}_closed'] = _closed_mouth(face.copy(), MOUTH).crop(CROP)
+    flex = Image.open(FLEX_ART).convert('RGBA')
+    out['pumped_grin'] = flex.crop(FLEX_CROP); out['pumped_closed'] = _closed_mouth(flex.copy(), FLEX_MOUTH, k=1.3).crop(FLEX_CROP)
     return out
+
+
+def variant_for(mood, mouth):
+    """The sprite name for a mood and a mouth ('grin' | 'closed'); 'happy' is the original sit-wave art."""
+    if mood not in MOODS or mood == 'happy': return mouth
+    return f'{mood}_{mouth}'
 
 
 _VAR = None
@@ -86,13 +153,14 @@ def _circle_clip(spr, cx, cy, r):
 class BrodieAvatar:
     STATES = ('idle', 'listening', 'speaking', 'thinking', 'offline')
 
-    def variant(self, state, t):
+    def variant(self, state, t, mood='happy'):
         if state == 'offline': return 'sleepy'
-        if state == 'speaking': return 'grin' if int(t * 7.0) % 2 == 0 else 'closed'
-        if state in ('listening', 'thinking'): return 'closed'
-        return 'grin'
+        if state == 'speaking': mouth = 'grin' if int(t * 7.0) % 2 == 0 else 'closed'
+        elif state in ('listening', 'thinking'): mouth = 'closed'
+        else: mouth = 'closed' if mood in ('focus', 'encourage') else 'grin'   # resting: watchful moods keep the small smile
+        return variant_for(mood, mouth)
 
-    def draw(self, img, cx, cy, height, state='idle', t=0.0, bubble=True, still=False):
+    def draw(self, img, cx, cy, height, state='idle', t=0.0, bubble=True, still=False, mood='happy'):
         """Brodie centred on (cx, cy), `height` px tall, on a round dark bubble whose ring shows the state."""
         h = int(height); r = int(h * 0.56)
         if bubble:
@@ -104,7 +172,7 @@ class BrodieAvatar:
                 cv2.circle(img, (int(cx), int(cy)), rr, VOLT_BGR, max(2, wdt // 2), cv2.LINE_AA)
             cv2.circle(img, (int(cx), int(cy)), r, ring, wdt, cv2.LINE_AA)
         bob = 0 if still else int(round(h * 0.012 * math.sin(t * 2 * math.pi / 3.6)))
-        spr = sprite(self.variant(state, t), int(h * 0.9))
+        spr = sprite(self.variant(state, t, mood), int(h * 0.9))
         x, y = int(cx - spr.shape[1] / 2), int(cy - spr.shape[0] * 0.52) + bob
         if bubble:                                               # keep him inside the round bubble (profile-picture look)
             spr = _circle_clip(spr, cx - x, cy - y, r - max(3, h // 28))
@@ -136,14 +204,14 @@ def _tile_pixels(variant, w, h, bob):
     return tile
 
 
-def _draw_tile(self, img, x0, y0, w, h, state='idle', t=0.0, still=False):
+def _draw_tile(self, img, x0, y0, w, h, state='idle', t=0.0, still=False, mood='happy'):
     """Brodie in a FaceTime-style picture-in-picture tile (the site's .pip): kit cream background, rounded corners, a thin light
     border; the border turns volt and pulses while he talks or listens; three dots while he is thinking."""
     H, W = img.shape[:2]; x0, y0, w, h = int(x0), int(y0), int(w), int(h)
     if x0 < 0 or y0 < 0 or x0 + w > W or y0 + h > H: return img
     r = max(6, w // 7); m = _round_mask(h, w, r)
     bob = 0 if still else int(round(h * 0.01 * math.sin(t * 2 * math.pi / 3.6)))
-    tile = _tile_pixels(self.variant(state, t), w, h, bob)
+    tile = _tile_pixels(self.variant(state, t, mood), w, h, bob)
     roi = img[y0:y0 + h, x0:x0 + w]; np.copyto(roi, tile, where=(m == 1)[:, :, None])
     live = state in ('listening', 'speaking') and not still
     pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi * 1.6)

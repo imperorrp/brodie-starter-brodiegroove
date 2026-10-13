@@ -2,3 +2,4 @@ fastapi>=0.110
 uvicorn>=0.29
 psycopg[binary]>=3.2     # db.py: Postgres (Supabase) when DATABASE_URL is set; SQLite needs nothing
 livekit-api>=1.0         # app.py GET /join: mints a room token for the browser caller (the cloud path, no laptop)
+pillow>=10               # og.py: the preview card behind GET /r/{code}/og.png

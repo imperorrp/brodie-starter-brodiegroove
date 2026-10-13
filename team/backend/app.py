@@ -14,12 +14,16 @@ Endpoints:
   Dance: POST /dance/result (duels on score100, crew boards), GET /dance/result/{code}, /dance/leaderboard, /dance/history,
          /dance/profile/{name} (GET; POST .../award, .../prefs; DELETE = forget me), POST /dance/share/{code}/start,
          GET /dance/funnel, /dance/board/{code}[/page], chains, classes, GET /dance (board page), GET /metrics
+  Share: GET /r/{code}         the result page the scorecard QR opens: score, grade, a "Call Brodie" FaceTime button, and Open
+                               Graph / Twitter tags so the link unfurls as a card when pasted (counted as a 'page_view' share)
+         GET /r/{code}/og.png  that card (1200x630, og.py; no photo of the dancer)
 """
 import datetime, os, re, secrets, time
+from functools import lru_cache
 from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response
 import db
 
 SESSION_GAP_S = 120          # events more than this far apart belong to different calls
@@ -145,6 +149,56 @@ def dance_funnel():
 @app.get('/dance/board/{code}')
 def dance_board(code: str):
     return db.crew_board(code) or {'error': 'no such code'}
+
+
+SITE_URL = os.environ.get('DANCE_SITE_URL', 'https://brodiegroove.vercel.app/')
+
+
+def _public_base(request):
+    """The backend's public address for absolute links (preview images must be absolute): DANCE_PUBLIC_URL, else the request's."""
+    return (os.environ.get('DANCE_PUBLIC_URL') or str(request.base_url)).strip().rstrip('/')
+
+
+@app.get('/r/{code}', response_class=HTMLResponse)
+def result_page(code: str, request: Request):
+    """What the scorecard QR opens: the result, a FaceTime button to call Brodie and battle it, and the tags that make the link
+    unfurl as a card in iMessage / Instagram / X / WhatsApp."""
+    r = db.get_result(code) if code.isdigit() and len(code) == 4 else None
+    if not r: return HTMLResponse(_page('No such code', f"<h1>No such code</h1><p class='sub'>That code doesn't exist (codes expire after 30 days). <a href='{_esc(SITE_URL)}'>Meet Brodie</a>.</p>"), status_code=404)
+    db.log_share(code, 'page_view')
+    import og
+    base = _public_base(request); s = og.score100(r); g = og.grade(s); name = (r.get('name') or 'A dancer').strip()
+    handle = (os.environ.get('DANCE_CALL_HANDLE') or '').strip()
+    title = f"{name} scored {s:.0f} ({g}) on Brodie Groove"
+    desc = f"Think you can beat it? FaceTime Brodie and say 'battle {code}'."
+    img = f"{base}/r/{code}/og.png"; url = f"{base}/r/{code}"
+    head = (f"<meta name='description' content='{_esc(desc)}'><meta property='og:type' content='website'><meta property='og:site_name' content='Brodie Groove'>"
+            f"<meta property='og:title' content='{_esc(title)}'><meta property='og:description' content='{_esc(desc)}'><meta property='og:url' content='{_esc(url)}'>"
+            f"<meta property='og:image' content='{_esc(img)}'><meta property='og:image:width' content='1200'><meta property='og:image:height' content='630'>"
+            f"<meta property='og:image:alt' content='{_esc(title)}'><meta name='twitter:card' content='summary_large_image'>"
+            f"<meta name='twitter:title' content='{_esc(title)}'><meta name='twitter:description' content='{_esc(desc)}'><meta name='twitter:image' content='{_esc(img)}'>")
+    call = (f"<a class='btn' href='facetime:{_esc(handle.replace(' ', ''))}'>Call Brodie</a>" if handle else
+            f"<a class='btn' href='{_esc(SITE_URL)}'>Meet Brodie</a>")
+    body = (f"<img class='card' src='/r/{code}/og.png' alt='{_esc(title)}' width='1200' height='630'>"
+            f"<h1>{_esc(name)} scored {s:.0f}</h1><p class='sub'>Grade {g}. Beat it: {'call Brodie on FaceTime' if handle else 'call Brodie'} and say "
+            f"<code>battle {code}</code>.</p>{call}<p class='sub'><a href='/dance/board/{code}/page'>See who has tried</a> · "
+            f"<a href='{_esc(SITE_URL)}'>What is Brodie Groove?</a></p>")
+    return _page(title, body, head=head)
+
+
+@app.get('/r/{code}/og.png')
+def result_card_png(code: str):
+    r = db.get_result(code) if code.isdigit() and len(code) == 4 else None
+    if not r: return JSONResponse({'error': 'no such code'}, status_code=404)
+    import og
+    png = _card_png(code, r.get('name'), og.score100(r), r.get('mode'), (os.environ.get('DANCE_CALL_HANDLE') or '').strip() or None)
+    return Response(png, media_type='image/png', headers={'Cache-Control': 'public, max-age=600'})
+
+
+@lru_cache(maxsize=256)
+def _card_png(code, name, score, mode, handle):
+    import og
+    return og.result_card(dict(code=code, name=name, score100=score, mode=mode), handle=handle)
 
 
 @app.get('/dance/board/{code}/page', response_class=HTMLResponse)
@@ -293,8 +347,8 @@ def _grade(score):
     return 'S' if s >= 92 else 'A' if s >= 80 else 'B' if s >= 65 else 'C' if s >= 50 else 'D'
 
 
-def _page(title, body):
-    return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{_esc(title)}</title>
+def _page(title, body, head=''):
+    return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{_esc(title)}</title>{head}
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@500;700&display=swap');
 :root{{--ink:#0A0A0B;--paper:#F4F4F0;--volt:#D9FF3D;--pink:#FF3DA8;--cyan:#3DE0FF;--mute:#9a9da4;--line:#26262b}}
@@ -304,6 +358,8 @@ h1{{font-family:'Archivo Black',system-ui,sans-serif;font-size:clamp(28px,6vw,44
 table{{width:100%;border-collapse:collapse}}td,th{{padding:12px 8px;border-bottom:1px solid var(--line);text-align:left}}th{{color:var(--mute);font-weight:500;font-size:14px;text-transform:uppercase;letter-spacing:.06em}}
 tr.me td{{color:var(--volt)}}.g{{display:inline-block;min-width:30px;text-align:center;padding:2px 8px;border-radius:999px;font-family:'Archivo Black';color:var(--ink)}}
 .gS{{background:var(--volt)}}.gA{{background:var(--cyan)}}.gB{{background:#c9c9c4}}.gC{{background:#ffb13d}}.gD{{background:#ff4d5e}}
+.card{{width:100%;height:auto;border-radius:18px;margin:0 0 22px;display:block}}
+.btn{{display:inline-block;background:var(--volt);color:var(--ink);font-family:'Archivo Black',system-ui;font-size:22px;padding:16px 28px;border-radius:999px;text-decoration:none;margin:4px 0 18px}}
 a{{color:var(--cyan)}}.pill{{display:inline-block;background:var(--volt);color:var(--ink);font-family:'Archivo Black';padding:4px 12px;border-radius:999px;font-size:14px}}
 </style></head><body>{body}</body></html>"""
 

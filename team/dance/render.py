@@ -869,13 +869,19 @@ def qr_matrix(data):
 
 
 def qr_payload(handle=None, code=None):
-    """What the scorecard QR opens: FaceTime with Brodie (DANCE_CALL_HANDLE), else the code's public board page when the backend has a
-    public address (DANCE_PUBLIC_URL, e.g. the Cloudflare tunnel), else nothing (a QR to a laptop-only address would be useless)."""
+    """What the scorecard QR opens. With a public backend (DANCE_PUBLIC_URL; Railway sets it) and a code: the code's result page
+    {base}/r/{code} (the score, a "Call Brodie" FaceTime button, and preview-card tags so the link unfurls when pasted). Else
+    FaceTime with Brodie (DANCE_CALL_HANDLE). Else nothing (a QR to a laptop-only address would be useless)."""
     import os
-    if handle: return f"facetime:{str(handle).replace(' ', '')}"
     base = (os.environ.get('DANCE_PUBLIC_URL') or '').strip().rstrip('/')
-    if base and code: return f"{base}/dance/board/{code}/page"
+    if base and code: return f"{base}/r/{code}"
+    if handle: return f"facetime:{str(handle).replace(' ', '')}"
     return None
+
+
+def mood_for_grade(grade):
+    """Brodie's mood for a grade: S/A pumped (the flex pose), B happy, C/D encourage; no grade: happy."""
+    return {'S': 'pumped', 'A': 'pumped', 'B': 'happy', 'C': 'encourage', 'D': 'encourage'}.get(grade, 'happy')
 
 
 def draw_qr(img, data, x, y, px):
@@ -1008,12 +1014,15 @@ def draw_photo_card(photo, result, code=None, title=None, award_title=None, xp=N
         pill(out, b, (x0, y + int(30 * s0)), px=int(24 * s0), fg=INK, bg=VOLT, pad=12, font='display'); y += int(52 * s0)
     if xp and xp.get('gained'):
         tx.put_text(out, f"+{xp['gained']} XP  ·  {str(xp.get('level_name', '')).upper()}", (x0, y + int(30 * s0)), int(24 * s0), PAPER, font='display', stroke=3); y += int(44 * s0)
-    stk = sprite('grin', int(ch * 0.2))                          # the kit Brodie sticker, next to the dancer
+    from .avatar import variant_for
+    gr0 = progression.grade(float(result['score'])) if result is not None and result.get('scored') else None
+    stk = sprite(variant_for(mood_for_grade(gr0), 'grin'), int(ch * 0.2))   # the kit Brodie sticker, next to the dancer, in the grade's mood
     sx = x1 - stk.shape[1]; sy = int(ch * 0.50) - stk.shape[0] // 2
     from .avatar import _blend
     _blend(out, stk, sx, sy)
     if code:
         by1 = y1; by0 = by1 - int(190 * s0)
+        pill_c(out, 'SCREENSHOT THIS', (x0 + x1) // 2, by0 - int(30 * s0), int(22 * s0), INK, PINK)   # the card only leaves the call as a screenshot
         plate(out, x0 - 8, by0, x1 + 8, by1, (26, 24, 24), 0.92, r=24)
         qr_px = int(150 * s0)
         qd = qr_payload(handle, code); has_qr = bool(qd) and draw_qr(out, qd, x1 - qr_px - 10, by0 + (by1 - by0 - qr_px) // 2, qr_px)
@@ -1089,13 +1098,14 @@ def pip_size(size):
     s0 = sc_of(size); w = int(118 * s0); return w, int(w * 4 / 3)
 
 
-def draw_badge(img, size, speaking=False, t=0.0, state='idle', still=False):
+def draw_badge(img, size, speaking=False, t=0.0, state='idle', still=False, mood='happy'):
     """Brodie (official kit art) in a picture-in-picture tile at the top right of the safe area, like a FaceTime tile; a volt
-    ring pulses while he talks or listens. state: idle / listening / speaking / thinking / offline (see avatar.py)."""
+    ring pulses while he talks or listens. state: idle / listening / speaking / thinking / offline; mood: happy / pumped /
+    focus / encourage (see avatar.py)."""
     from .avatar import avatar
     _, sy, sx1, _ = safe_box(size); w, h = pip_size(size)
     st = 'speaking' if speaking and state == 'idle' else state
-    avatar().draw_tile(img, sx1 - w, sy, w, h, st, t, still=still)
+    avatar().draw_tile(img, sx1 - w, sy, w, h, st, t, still=still, mood=mood)
     return img
 
 
@@ -1273,7 +1283,7 @@ def compose(frame_bgr, lm_img, hud, ghost=None, show_live=True, size=None, squad
     if ghost is not None and st in ('show', 'countin', 'attempt'):
         img = draw_panel(img, ghost, '', size, highlight=(st == 'show'), small=(st == 'attempt'))
     edge_shade(img, size)
-    draw_badge(img, size, hud.get('speaking', False), t, state=hud.get('avatar_state', 'idle'), still=(st == 'attempt'))
+    draw_badge(img, size, hud.get('speaking', False), t, state=hud.get('avatar_state', 'idle'), still=(st == 'attempt'), mood=hud.get('mood', 'happy'))
     y = draw_state_chip(img, size, 'GET READY' if st == 'countin' and stage != 'WATCH' else ('PAUSED' if hud.get('paused') else stage), tempo=hud.get('tempo'))
     if (scoring or stage == 'YOUR TURN') and not squad and st in ('attempt', 'scored', 'feedback'):
         draw_score_block(img, size, y, hud.get('running_score'), combo=hud.get('combo', 0) if st == 'attempt' else 0)
@@ -1311,7 +1321,7 @@ def draw_recap(img, recap, size):
 
 def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, best=None, recap=None, caption=None, footer=None, fxq=None, t=0.0,
                  gesture=None, paused=False, safety=False, players=None, hints=False, setup=None, speaking=False, state=None, avatar_state='idle',
-                 countdown=None, menu=False, compare=None, brk=None, board=None):
+                 countdown=None, menu=False, compare=None, brk=None, board=None, mood='happy'):
     """Chat, offer, setup and between-phrase view. In chat Brodie (kit avatar) is big at the bottom-left with his words beside him;
     in setup he moves to the top-left and the setup guide takes over; overlays on top. Everything stays inside the FaceTime safe area."""
     sh, sw = frame_bgr.shape[:2]; size = size or canvas_size(sw, sh)
@@ -1330,7 +1340,7 @@ def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, be
     cards = bool(menu) and state in ('CHOOSE', None)
     if cards: dim(img, 0.45)                                    # the cards sit on a darkened picture (you still see yourself)
     edge_shade(img, size)
-    draw_badge(img, size, speaking, t, state=avatar_state)
+    draw_badge(img, size, speaking, t, state=avatar_state, mood=mood)
     if not cards: draw_state_chip(img, size, 'PAUSED' if paused else (state or 'EXPLORE'))
     if cards:
         draw_mode_cards(img, size, menu, t)

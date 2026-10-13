@@ -4,7 +4,8 @@ What exists, how far each piece has been verified, and what has shipped. Update 
 something changes state; the dated narrative belongs in `../PROGRESS.md` (private), the ranked work in `TODO.md`, the
 file map in `CODEBASE.md`.
 
-**As of 2026-10-12, about 17:05 ET.** The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
+**As of 2026-10-13, about 12:45 ET.** Tuesday's features are built: Brodie's face has moods (kit art only), and the scorecard
+QR opens a result page `/r/<code>` that unfurls as a preview card when pasted (it needs the deployed backend to be reachable). The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
 the submission is in. The cloud box (Supabase + Railway, `team/cloud/`) is written and its Postgres engine verified against a
 local Postgres 17, but not yet deployed. On 2026-10-12 two bugs that broke every real call since build-day evening were fixed:
 Gemini failed to start (`audio_in.py`'s `RoomOptions` swap), so Brodie was silent, and the lite-model swap deadlocked the
@@ -45,7 +46,9 @@ webcam) → **Chert line held** (`chert dev` connected from Windows) → **FaceT
 | Noise: Krisp BVC + AGC into Gemini, "was that said to Brodie" scoring, answer confidence, "Was that a yes?", local VAD barge-in over the music | `audio_in.py`, `addressed.py`, `answers.py`, `live.vad_listener` | unit + sim (`choose_noise`, `garbled_answers`); BVC only on LiveKit Cloud; not yet on a call with real room noise. **On this laptop** BVC is off (`livekit-plugins-noise-cancellation` not installed in `.venv`) and the local VAD barge-in dies at call start (`livekit-local-inference` is stubbed); AGC is on |
 | Dead-air watchdog, safety stop on pain words, "forget me" twice, call cap, frozen video, phone moved, backlight, fall check | `watchdog.py`, `guards.py`, `live._guards` | unit + sim; the budget guard's lite-model swap on a real call (it deadlocked the worker until 2026-10-12; now human Chrome) |
 | 14 Gemini function tools backed by the session | `tools.py` | unit (every tool refuses to start a dance) + sim; on a human Chrome call (2026-10-12) Gemini called `propose_activity` and `confirm_start`, both ok; the other 12 not yet seen live (`DANCE_TOOLS=0` is the fallback) |
-| Video: ghost on the body + panel, state chips, count tiles, verdict pops, reveals, recap, mode cards, setup view, breaks, boards, photo scorecard with code tiles and QR, kit avatar, portrait for Chert / landscape for a webcam, safe area | `render.py`, `text.py`, `fx.py`, `avatar.py`, `screens.py` | unit + 20 HUD snapshots + headless and human Chrome; kit compliance passes `check_cream.py`; compose 10–15 ms |
+| Video: ghost on the body + panel, state chips, count tiles, verdict pops, reveals, recap, mode cards, setup view, breaks, boards, photo scorecard with code tiles, QR and a SCREENSHOT THIS pill, kit avatar, portrait for Chert / landscape for a webcam, safe area | `render.py`, `text.py`, `fx.py`, `avatar.py`, `screens.py` | unit + 20 HUD snapshots + headless and human Chrome; kit compliance passes `check_cream.py`; compose 10–17 ms |
+| Brodie's moods: happy (wink + grin), pumped (the kit flex pose), focus, encourage; set by PERFECT streaks, double MISSes, scores, K.O., level-ups and the coach style; the scorecard sticker follows the grade | `avatar.py`, `live.set_mood/cur_mood`, `render.mood_for_grade` | unit (every frame passes `check_cream.py`; triggers and style thresholds) + 5 sim scenarios (learn, pose step, battle won/lost, daily) on 2026-10-13 + frames checked by eye; not yet on a live call |
+| Result link and preview card: the QR opens `/r/<code>` (score, Call Brodie FaceTime button, Open Graph / Twitter tags), `/r/<code>/og.png` (1200×630, no photo) | `backend/app.py`, `backend/og.py`, `render.qr_payload` | unit (`test_backend`: tags, absolute image URL, PNG size, 404s, `page_views`); cards checked by eye. **Unfurls only once the backend has a public URL** (Railway); not yet pasted into iMessage / Instagram / X |
 | Game layer: grades, titles, XP, levels, unlocks, achievements, streaks, coach styles | `progression.py`, backend profiles | unit + sim |
 | Backend: codes (unique, freed after 30 days with their ghost/token/shares), results, boards, funnel, profiles, chains, classes, ghosts, metrics, HTML pages, `/join` (mints the browser caller's room) | `backend/app.py`, `db.py`, `dbcheck.py`, `import_sqlite.py` | unit (`test_backend`, 7, SQLite) + sim via the in-process fake + `/join`, `/phone.html`, `/health` and the cloud guard checked with the test client; the Postgres engine passes the same tests on a local Postgres 17 (2026-10-12), **never run against a real Supabase yet** (`dbcheck.py` is the check); no auth |
 | Browser caller (any Chrome, Android), one-command test, headless test, named dispatch via `mint_link.py`, demo rooms | `web/phone.html`, `scripts/chrome.ps1`, `chrome_test.py`, `serve_web.py` | headless PASS (10-11 14:55 and 17:30 ET; 10-12 00:51 ET with Gemini speaking) + human runs (latest 10-12 01:08 ET). `chrome.ps1` now starts its worker under `AGENT_NAME`, so its rooms reach it |
@@ -53,7 +56,7 @@ webcam) → **Chert line held** (`chert dev` connected from Windows) → **FaceT
 | Telemetry per call, `GET /metrics`, eval report, cue review CSV | `telemetry.py`, `eval/run_eval.py` | in place; eval needs the laptop to itself |
 | Landing page, waitlist, promo kit (8 days of posters, stories, reels, captions), pitch video, generated film | `web/groove`, `promo/`, `video/` | rendered on this laptop |
 
-Counts at the last pass: 165 pytest cases (107 functions, 10 files), 46 eval scenarios + duel, 14 selftest checks,
+Counts at the last pass: 168 pytest cases (110 functions, 10 files), 46 eval scenarios + duel, 14 selftest checks,
 20 HUD snapshots, 29 keys, 14 tools, 27 modules in `team/dance` plus tests and eval.
 
 ## 3. Known weaknesses (accepted for now, ranked by how much they hurt)
@@ -72,7 +75,10 @@ Counts at the last pass: 165 pytest cases (107 functions, 10 files), 46 eval sce
    panic when a room is deleted mid-connect (hence `dance_loop.ps1`); memory pressure has killed background services (on
    2026-10-12 it killed the worker after a call, with 0.5 GB of 15.7 GB free: close spare Chrome tabs and IDEs before a call);
    never run `chert doctor --agent` while `chert dev` is up. A Mac for the line is the plan, the shim the fallback.
-5. **`DANCE_CALL_HANDLE` is unset**, so the scorecard has no QR, which is the share mechanic. Zero code to fix.
+5. **`DANCE_CALL_HANDLE` and `DANCE_PUBLIC_URL` are unset on this laptop**, so the scorecard has no QR, which is the share
+   mechanic. On Railway `DANCE_PUBLIC_URL` comes from its domain (QR → `/r/<code>`); set the handle there too so the result
+   page has a Call Brodie button. Nothing ever leaves the call by itself (no iMessage/SMS in the starter): the card travels as
+   the caller's screenshot, the QR and the spoken code.
 6. Squad colour tags can still swap when dancers cross fast; more than four people are told to cheer.
 7. The backend has no auth; identity is the first name a caller says. Fine for a local demo, not for the open internet.
    Once deployed, `GET /join` can open rooms (and spend Gemini minutes) for anyone who has the link: set `JOIN_KEY`.
@@ -100,7 +106,7 @@ Counts at the last pass: 165 pytest cases (107 functions, 10 files), 46 eval sce
 ## 5. How to check the state quickly
 
 ```
-.venv\Scripts\python -m pytest -q team\dance\tests                 # 165 cases, 20-50 s (selftest's 25 ms compose check can flake when RAM is short)
+.venv\Scripts\python -m pytest -q team\dance\tests                 # 168 cases, 20-50 s (selftest's 25 ms compose check can flake when RAM is short)
 .venv\Scripts\python -m team.dance.offline_test selftest           # 14 checks
 .venv\Scripts\python -m team.dance.eval.run_eval --jobs 6          # 46 scenarios; run with nothing else up
 .venv\Scripts\python team\scripts\chrome_test.py                   # headless Chrome through the live worker

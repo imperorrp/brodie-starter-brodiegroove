@@ -84,7 +84,7 @@ words (doubled lines, "(Private instruction…)" read aloud, live calls 2026-10-
 | With me → break → your turn | "Do it with me", then a 3 s **BACK TO START** break showing the first pose, then your scored try | — | — |
 | Result | "<reaction> <score>. <tip>." then "Once more?" / "A little faster?" / "Next move?" | again / faster / slower / next / loop / explain / stop / yes / **hands up = yes** | reprompt, then the dead-air nudge every 22 s (doubling after 3) |
 | Next move | a 3.5 s **NEXT MOVE** break with a 3-2-1 ring and the next move's first pose | — | after 12 min: "full routine now, or keep practising?" |
-| Wrap | finish pose, "That's a wrap! ..." and the card; battles: a code only on a win, then "Save your ghost for friends?" | "rematch" / hands up (a fresh hold, at least 1.5 s after the card) | after 6 s (and the wrap line), the cards return with **"WHAT'S NEXT?"** and "Nice work! What next? Pick any mode, or say bye." |
+| Wrap | finish pose, "That's a wrap! ... Your code is 4 8 2 1. Screenshot this and send it to the friend who thinks they can out-dance you." and the card (a **SCREENSHOT THIS** pill over the code; the QR opens `<public URL>/r/<code>`, else FaceTime with Brodie); battles: a code only on a win, then "Save your ghost for friends?" | "rematch" / hands up (a fresh hold, at least 1.5 s after the card) | the card stays about 15 s (9 s, then 6 s over the menu, longer while the wrap line plays); then the cards return with **"WHAT'S NEXT?"** and "Nice work! What next? Pick any mode, or say bye." Nothing is sent after the call: the screenshot, the QR and the spoken code are how it travels |
 | Bye | "Thanks for dancing with me!" | "bye", "I'm done", "gotta go" | the call ends |
 
 Between features everything activity-specific is reset (squad roster, battle HUD, gesture latches, pending commands, stale answers);
@@ -94,6 +94,11 @@ instead") between moves leaves the current one and offers the new one; during th
 **Judging per frame:** pose → primary (or each squad dancer) → angles on a 4-per-count grid (joints the depth module marks ambiguous
 leave the tip choice, and leave scoring with `DANCE_DEPTH_GATE=1`) → banded DTW → verdict per count (green < 18°, amber < 32°) → score →
 up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
+
+**Brodie's face** (the PiP tile) reacts without a word: a PERFECT streak of 4 / 8 / 16 flashes the flex pose (chill: 8 / 16 only),
+two MISSes in a row bring the encouraging face (brows up), a scored try shows pumped (85+; hype 75+, chill 92+), happy, or
+encourage (under 50), a K.O. win or loss and a level-up react too; between reactions he is focused while you dance and with the
+COACH style, else happy. The scorecard sticker follows the grade (S/A flex, B happy, C/D encourage).
 
 ---
 

@@ -3,7 +3,7 @@
 Ranked. `[ ]` open, `[~]` started, `[x]` done, `[!]` blocked. Tick things here; write the story of how in `../PROGRESS.md`;
 when a tick changes what works, update `STATUS.md`; when it changes a file's role, update `CODEBASE.md`.
 Sources folded in: `PLANNED_IMPROVEMENTS.md`, `team/docs/AUDIT_2026-10-11.md`, `CONVERSATION.md` §8,
-`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-12, 17:05 ET.
+`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-13, 12:45 ET.
 
 The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every engineering item below should earn a post.
 
@@ -22,8 +22,9 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
 - [ ] **Log every post** at getbrodie.com/ivyhacks (resubmit with the same team name each time).
 - [ ] **Retire `team/docs/demo-and-posting.md`**; its checklist is stale and its plan is "_tbd_". `team/promo/STRATEGY.md`
       is the plan now; keep one source.
-- [ ] **Set `DANCE_CALL_HANDLE`** in `.env.local` to the line's FaceTime address and document it in `.env.example`
-      (keep the value out of git). Without it the scorecard has no QR. Zero code.
+- [ ] **Set `DANCE_CALL_HANDLE`** in `.env.local` and on Railway to the line's FaceTime address and document it in
+      `.env.example` (keep the value out of git). It is the result page's Call Brodie button and, with no public URL, the QR.
+      Zero code.
 - [ ] **Book Chert slots for the week** and put the times on the site; set `call_line` / `call_url` in
       `team/promo/config.json`, re-run `python -m team.promo.render` and `python -m team.promo.clips`.
 - [ ] **One real FaceTime call that lands.** Worker on `dance_loop.ps1 -AgentName dance-battle-agent-ivyhacks`, `chert.ps1
@@ -38,7 +39,7 @@ from `PLANNED_IMPROVEMENTS.md` §4. Times: TikTok/Reels 6–9 PM, IG feed 11 AM�
 | Day | Post (ready) | Ship so the post is real | |
 |---|---|---|---|
 | Mon 10/12 | Launch: the line is open; 46 s pitch video | Line booked, `call_line` set, handle set; the real-call clip | [ ] |
-| Tue 10/13 | How it works carousel; 55 s Maya film | **Brodie's face with moods** (drive `avatar.py` expression from the last verdict and coach style; one sprite layer + a mood variable) and the **Open Graph result card** (`GET /dance/result/{code}/og.png` with Pillow; unfurls when a link is pasted) | [ ] |
+| Tue 10/13 | How it works carousel; 55 s Maya film | **Brodie's face with moods** (built 2026-10-13: happy / pumped flex / focus / encourage from kit art, driven by verdicts, scores, K.O., level-ups, coach style) and the **result link with a preview card** (built: QR → `/r/<code>`, `/r/<code>/og.png`). Left: deploy so the link is public, then paste one into iMessage / Instagram / X to see it unfurl, and see the moods on a live call | [~] |
 | Wed 10/14 | "Real scores, not vibes" (builder day): 60/30/10, battle capture | **Start-offset search before the DTW** (§3.1) so the numbers deserve the post; the self-consistency table if it exists | [ ] |
 | Thu 10/15 | Pick your Brodie: HYPE / CHILL / COACH | Record the three voice-overs `data/tmp/promo/vo/{hype,chill,coach}.wav` + `lines.json` (nothing writes them yet; `team/video/voice.py` has the shape) | [ ] |
 | Fri 10/16 | Squad up, get tagged | A squad run with real people on one camera (`-MaxPoses 4`; a GPU box or a fast laptop: 4 poses cost 237 ms/frame here) | [ ] |
@@ -130,7 +131,8 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
       `propose_activity` and `confirm_start` seen ok on a human Chrome call (2026-10-12); the other 12 not yet.
 - [ ] **Before any post or demo: `chrome_test.py` headless, then check the newest `data/tmp/sessions/*.jsonl` for
       `speech_dropped`.** Real-call-only bugs (Gemini start, the pose-model deadlock) passed every unit test and eval scenario.
-- [ ] The QR scanned on an iPhone opens FaceTime to the line.
+- [ ] The QR in a FaceTime screenshot, opened from iPhone Photos, lands on `/r/<code>` and its Call Brodie button opens
+      FaceTime to the line; the same link pasted into iMessage, Instagram DMs and X unfurls as the card.
 - [ ] Krisp BVC with a TV on in the room; "Was that a yes?" with a mumbled answer.
 - [ ] `DANCE_RTT` from a clap test on the first real call (default 0.3 s).
 - [ ] The eval harness alone on the laptop after each engine change (`run_eval --jobs 6`; it did not finish beside a live worker).
@@ -156,7 +158,7 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
       dispatch test while the line is live, close spare Chrome tabs.
 - [x] Decide on the backend's home: Supabase Postgres behind the same FastAPI, deployed with the worker on Railway
       (`team/cloud/`; the Vercel two-service idea in `team/docs/vercel-services.md` is dropped). Deployment itself: §0.
-- [ ] Cloud follow-ups once the box is live: Realtime on the crew board, an Open Graph card per code (Tue's post), share
+- [ ] Cloud follow-ups once the box is live: Realtime on the crew board, (the Open Graph card per code is built: `/r/<code>`), share
       links with a `source` on `dance_shares`, a `sessions` table (one row per call) for the traction chart, pg_cron for the
       30-day expiry, a second worker container when calls overlap (state is already off the disk).
 - [ ] Chert outbound audio for reminders, if the project ever gets it; until then nothing leaves the call.

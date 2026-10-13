@@ -474,11 +474,12 @@ def share_count(code, kind='challenge_start'):
 
 def funnel():
     with _lock, _conn() as c:
-        cnt = {k: c.execute('SELECT COUNT(*) FROM dance_shares WHERE kind = ?', (k,)).fetchone()[0] for k in ('issued', 'challenge_start', 'challenge_complete')}
+        cnt = {k: c.execute('SELECT COUNT(*) FROM dance_shares WHERE kind = ?', (k,)).fetchone()[0] for k in ('issued', 'challenge_start', 'challenge_complete', 'page_view')}
         codes_with_starts = c.execute("SELECT COUNT(DISTINCT code) FROM dance_shares WHERE kind = 'challenge_start'").fetchone()[0]
     issued = cnt['issued']
     return dict(codes_issued=issued, challenge_starts=cnt['challenge_start'], challenge_completes=cnt['challenge_complete'],
-                codes_with_starts=codes_with_starts, start_rate=round(codes_with_starts / issued, 3) if issued else 0.0)
+                codes_with_starts=codes_with_starts, start_rate=round(codes_with_starts / issued, 3) if issued else 0.0,
+                page_views=cnt['page_view'])                     # GET /r/{code}: the scorecard QR or a pasted result link
 
 
 def crew_board(code, limit=50):

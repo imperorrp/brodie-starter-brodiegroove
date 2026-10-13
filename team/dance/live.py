@@ -503,6 +503,7 @@ class DanceSession:
         self.code = os.environ.get('DANCE_CODE') or None          # a four-digit code the caller spoke (duel or chain to join)
         self.my_code = None; self.backend = Backend()
         self.pending_cmd = None; self.stop = False; self.pose = None; self.mpose = None; self.pose_reload = False
+        self.mood = None; self.mood_until = -1.0                 # Brodie's face (avatar.py MOODS): a reaction that expires, see set_mood
         self.exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix='dance-pose')
         self.source = None; self.writer = None; self.last_seq = -1; self.frames = 0; self.pose_ms = []
         self.last_lm = None; self.log = []; self.t0 = None; self.published = False
@@ -531,7 +532,7 @@ class DanceSession:
         self.squad_players = []; self.colours = {}; self.names = {}; self.ltr_names = []
         self.step = None; self.battle_hud = None; self.queued_key = None; self.challenge = None; self.final_card = None
         self.last_cmd = {}; self.last_result = None; self.last_cue = None; self.last_title = None; self.in_warmup = False
-        self.combo_run = {}; self.last_tip_beat = {}; self.cur_engine = None; self.time_to_start = None; self.squad_since = None
+        self.combo_run = {}; self.reds_run = {}; self.last_tip_beat = {}; self.cur_engine = None; self.time_to_start = None; self.squad_since = None
         self.state = 'EXPLORE'; self.epoch = 0; self.say_q = []; self.speaker_task = None; self.activity_req = None; self.affirm_t = -1.0; self.deny_t = -1.0
         self.cancel_req = False; self.hold_until = -1.0; self.space_ok = False; self.upper_override = bool(getattr(self, 'room_upper', False)); self.luma = None; self.cur_lm = None
         if self.upper_override: self.upper_body = True
@@ -953,6 +954,24 @@ class DanceSession:
         if (last is not None and time.monotonic() - float(last) < 1.0) or self.now() - self.last_caller_text_t < 1.5: return 'listening'
         if self.say_q: return 'thinking'
         return 'idle'
+
+    def set_mood(self, mood, seconds):
+        """Brodie's face reacts for a few seconds (avatar.py MOODS), then falls back to cur_mood's resting face."""
+        self.mood = mood; self.mood_until = self.now() + float(seconds)
+
+    def mood_for_score(self, score):
+        """A scored try: pumped for a big score (the bar moves with the coach style), encourage for a low one, else happy."""
+        big = dict(hype=75.0, chill=92.0).get(self.persona, 85.0)
+        if score >= big: self.set_mood('pumped', 4.0)
+        elif score < 50.0: self.set_mood('encourage', 4.0)
+        else: self.set_mood('happy', 3.0)
+
+    def cur_mood(self, now, engine=None):
+        """The face now: a live reaction if one is running, else focus while the caller dances (he is watching) or for the COACH
+        style, else happy."""
+        if self.mood and now < self.mood_until: return self.mood
+        if engine is not None and getattr(engine, 'state', None) == 'attempt': return 'focus'
+        return 'focus' if self.persona == 'coach' else 'happy'
 
     def camera_note_text(self):
         from team.dance.setup import camera_note
@@ -1463,7 +1482,7 @@ class DanceSession:
                                gesture=extra.get('gesture'), paused=extra.get('paused', False), safety=extra.get('safety', False), players=extra.get('players'),
                                hints=extra.get('hints', False), setup=extra.get('setup'), speaking=extra.get('speaking', False), state=extra.get('state'),
                                avatar_state=extra.get('avatar_state', 'idle'), countdown=extra.get('countdown'), menu=extra.get('menu', False),
-                               compare=extra.get('compare'), brk=extra.get('brk'), board=extra.get('board'))
+                               compare=extra.get('compare'), brk=extra.get('brk'), board=extra.get('board'), mood=extra.get('mood', 'happy'))
         return self._encode_sync(img)
 
     async def prepare(self, frame, ms):
@@ -1783,7 +1802,8 @@ class DanceSession:
         self.battle_hud = None; self.compare_ui = None; self.countdown_ui = None; self.setup_ui = None; self.recap = None
         self.pending_cmd = None; self.pause_req = False; self.resume_req = False; self.stop_routine = False; self.cancel_req = False
         self.paused = False; self.in_warmup = False; self.in_demo = False; self.practice = False; self.stage = None; self.step = None
-        self.slow_mode = False; self.last_tip_beat = {}; self.combo_run = {}; self.ready_hits = {}; self.want_ready = False
+        self.slow_mode = False; self.last_tip_beat = {}; self.combo_run = {}; self.reds_run = {}; self.ready_hits = {}; self.want_ready = False
+        self.mood = None; self.mood_until = -1.0
         for g in self.gest.values(): g.reset()
         self.affirm_t = -1.0; self.deny_t = -1.0; self.hold_until = -1.0; self.q_open = None
         self.menu_req = False; self.cmd_floor_t = self.now()
@@ -2361,8 +2381,8 @@ class DanceSession:
         self._gestures(now, lm, in_attempt)
         speaking = self._model_speaking() or (engine is None and not self._audio_idle())
         self.last_bgr = bgr
-        av_state = self.avatar_state(speaking)
-        hud = None; ghost = None; card = None; extra = dict(t=now, speaking=speaking, state=self.state, avatar_state=av_state, countdown=self.countdown_ui)
+        av_state = self.avatar_state(speaking); mood = self.cur_mood(now, engine)
+        hud = None; ghost = None; card = None; extra = dict(t=now, speaking=speaking, state=self.state, avatar_state=av_state, countdown=self.countdown_ui, mood=mood)
         if engine is not None:
             if isinstance(engine, SquadEngine):
                 engine.on_frame(now, {pid: (l, ww) for pid, l, ww in self.players})
@@ -2373,7 +2393,7 @@ class DanceSession:
                 hud = engine.hud(now); ghost = engine.ghost_sample(now)
                 hud.update(history=self.history, best=self.best, fx=self.fx, difficulty=self.difficulty, step=self.step, battle=self.battle_hud,
                            gesture=getattr(self, 'gesture_ui', None), paused=self.paused, stage=self.stage, ghost_overlay=self.ghost_overlay,
-                           practice=self.practice, speaking=speaking, demo=self.in_demo, avatar_state=av_state)
+                           practice=self.practice, speaking=speaking, demo=self.in_demo, avatar_state=av_state, mood=mood)
                 if self.in_warmup or self.practice: hud['fx'] = None
                 if self.call_mode == 'squad':
                     extra['squad_lms'] = {pid: (l, self.colours.get(pid, 'volt')) for pid, l, _ in self.players if pid in self.colours}
@@ -2407,7 +2427,11 @@ class DanceSession:
             v = ev.get('live_verdict'); b = ev.get('beat', 0)
             if v: self.fx.add('judgment', now, verdict=v, pid=pid, colour=ev.get('colour'), small=pid is not None)
             c = self.combo_run.get(pid, 0); c = c + 1 if v == 'green' else 0; self.combo_run[pid] = c
-            if c in (4, 8, 16) and pid in (None, (self.squad_players[0][0] if self.squad_players else None)): self.fx.add('combo', now, n=c)
+            lead = pid in (None, (self.squad_players[0][0] if self.squad_players else None))
+            if c in (4, 8, 16) and lead: self.fx.add('combo', now, n=c)
+            if lead and c in ((8, 16) if self.persona == 'chill' else (4, 8, 16)): self.set_mood('pumped', 2.0)   # a PERFECT streak
+            prev = self.reds_run.get(pid, 0); self.reds_run[pid] = prev + 1 if v == 'red' else 0
+            if lead and self.reds_run[pid] == 2: self.set_mood('encourage', 2.5)                               # two misses in a row
             if self.battle_hud is not None and v in ('green', 'amber'):
                 floor_hp = self.battle_hud.get('round_floor', 0)
                 self.battle_hud['ghost_hp'] = max(floor_hp, self.battle_hud['ghost_hp'] - (12 if v == 'green' else 6))
@@ -2427,7 +2451,7 @@ class DanceSession:
             r = {k: ev.get(k) for k in ('score', 'scored', 'spatial', 'timing', 'energy', 'max_combo', 'visible_fraction')}
             self.telemetry.score(r, phrase=ev.get('phrase'), pid=pid)
             if r.get('scored') and (r.get('score') or 0) >= 80: self.fx.add('confetti', now + 1.0, seed=int(now * 10) % 9973)
-            if r.get('scored'): self.sfx('stamp')
+            if r.get('scored'): self.sfx('stamp'); self.mood_for_score(float(r.get('score') or 0))
 
     # ---- the opening conversation ----
     def library_keys(self):
@@ -2486,7 +2510,7 @@ class DanceSession:
             else:
                 eng = PhraseEngine(key, phrase_index=phrase_index, tempo=tempo, show_repeats=max(1, show_repeats) if demo else show_repeats,
                                    countin_beats=countin_beats, rtt_s=self.rtt_s, on_event=self.on_engine_event, freestyle=freestyle, focus=focus, demo_only=demo)
-            eng.step = step; self.step = step; self.cur_engine = eng; self.combo_run = {}; self.last_tip_beat = {}; self.recap = None
+            eng.step = step; self.step = step; self.cur_engine = eng; self.combo_run = {}; self.reds_run = {}; self.last_tip_beat = {}; self.recap = None
             if self.depth_gate and isinstance(eng, PhraseEngine):
                 def _gate(m):
                     amb = (self.orient_state or {}).get('ambiguous')
@@ -3078,6 +3102,7 @@ class DanceSession:
                 await self.show_break(f'ROUND {i + 2}', pacing.ROUND_GAP_S, self.key, plan[i + 1][0])
         won = total >= target and len(self.rounds) == 3; self.battle_won = won
         self.fx.add('ko', self.now(), text='K.O.!' if won else 'GHOST WINS'); self.sfx('ko' if won else 'stamp')
+        self.set_mood('pumped' if won else 'encourage', 5.0)
         self.extras['battle_done'] = len(self.rounds) == 3
         self.battle_target = target
         await self.finish_session('battle', total=total, best_r=best_r)
@@ -3353,6 +3378,7 @@ class DanceSession:
         t = self.now()
         if aw.get('leveled_up'):
             self.fx.add('levelup', t + 0.3, level_name=aw.get('level_name'), unlocks=aw.get('newly_unlocked') or []); self.sfx('levelup')
+            self.set_mood('pumped', 4.0)
         for k, a in enumerate(aw.get('new_achievements') or []):
             self.fx.add('achievement', t + 2.8 + 0.9 * k, name=a['name']); self.sfx('achievement')
         self.telemetry.event('award', xp=xp, breakdown=br, leveled_up=aw.get('leveled_up'), achievements=[a['id'] for a in aw.get('new_achievements') or []])

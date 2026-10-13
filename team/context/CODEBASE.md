@@ -73,8 +73,8 @@ ivyhacks-brodie/
 │   │   ├── library/*.json    reference keys (AIST++ ones are git-ignored)
 │   │   ├── assets/brodie/    the official character kit + cream checker; assets/fonts/ (OFL)
 │   │   ├── voice/*.pcm       dormant local TTS lines
-│   │   ├── tests/            165 pytest cases;  eval/  scripted end-to-end sessions + HUD snapshots
-│   ├── backend/              app.py (FastAPI routes, HTML pages, /join), db.py (Postgres or SQLite), dbcheck.py, import_sqlite.py, team.db (ignored)
+│   │   ├── tests/            168 pytest cases;  eval/  scripted end-to-end sessions + HUD snapshots
+│   ├── backend/              app.py (FastAPI routes, HTML pages, /join, /r/<code>), og.py (preview card), db.py (Postgres or SQLite), dbcheck.py, import_sqlite.py, team.db (ignored)
 │   ├── cloud/                the cloud box: start.sh (API + worker, restart loops), requirements.txt, fetch_models.py, fetch_library.py, pack_library.py, README.md (the runbook)
 │   ├── web/                  phone.html (browser caller), groove/index.html (landing page), certs/ (ignored)
 │   ├── scripts/              chrome.ps1, dance.ps1, dance_loop.ps1, chert.ps1 + shim, mint_link.py, serve_web.py, ...
@@ -121,7 +121,9 @@ ivyhacks-brodie/
    transcript is parsed by `on_worker_event` (regex `classify()`, `addressed.score()`, `answers.decide()`), and Gemini's
    tool calls land on `tool_*` methods of the session.
 8. **Results.** `finish_session()` POSTs `/dance/result`, gets a code and (for battles) a one-time ghost token, awards XP via
-   `/dance/profile/{name}/award`, draws the scorecard with a QR (`facetime:<DANCE_CALL_HANDLE>`), and the telemetry summary
+   `/dance/profile/{name}/award`, draws the scorecard (about 15 s on screen: 9 s in `finish_session`, then `CARD_HOLD_S` 6 s
+   over the menu, longer while the wrap line plays) with a QR (`<DANCE_PUBLIC_URL>/r/<code>`, the result page, else
+   `facetime:<DANCE_CALL_HANDLE>`). Nothing is sent off the call: the card leaves as the caller's screenshot. The telemetry summary
    goes to `/events` when the session closes.
 9. **Without LiveKit.** `python -m team.dance.live --simulate clip.mp4 ...` runs the same `DanceSession` against a video with
    fake player/voice/job objects and scripted caller lines; `eval/run_eval.py` runs 46 such scenarios in parallel.
@@ -201,7 +203,7 @@ owner, rounds, bpm)`, `pack`/`unpack`, `valid` (delegates to `backend/db.valid_g
 `cc_street_girl` (Wikimedia Commons, tracked), `test_squats` (starter recording, tracked), `class_1771` (ignored).
 `gen_*`, `ghost_*`, `chain_*` keys are never saved here.
 
-### 3.2 The session: `live.py` (3862 lines)
+### 3.2 The session: `live.py` (3888 lines)
 
 The whole call. Module layout, in file order:
 
@@ -253,6 +255,10 @@ lines are dropped) and sends the new rules as a background note.
 - *Tool backends* (called by `tools.py`): `tool_command`, `tool_answer`, `tool_confirm`, `set_preferences`, `camera_status`,
   `last_attempt_summary`, `tool_compare`, `queue_routine`, `profile_summary`, `tool_forget`, `squad_status`,
   `set_call_mode`, `assign_name`.
+- *Face:* `set_mood(mood, seconds)` (a reaction that expires), `mood_for_score` (pumped at 85+, hype 75+, chill 92+; encourage
+  under 50; else happy), `cur_mood(now, engine)` (the reaction, else focus while the caller dances or for COACH, else happy);
+  set by a PERFECT streak (4/8/16 in a row, chill 8/16: pumped 2 s), two MISSes in a row (encourage 2.5 s), each scored try,
+  a K.O. (pumped / encourage 5 s), a level-up (pumped 4 s). Goes to the renderer as `hud['mood']` / `extra['mood']`.
 - *Video:* `publish` (`coach-video`, no simulcast, 1.8 Mbit/s), `newest_frame` (reads `job.latest`), `prepare`/`_pose_sync`
   (pose thread), `render_push`/`_render_sync`/`_encode_sync`. `_close_pose_sync` closes the MediaPipe landmarkers on the pose
   thread: when the budget guard asks for `lite` (`pose_reload`) and when the call ends. Never leave them to the garbage
@@ -346,24 +352,27 @@ beat), `squad_result` (ranking, MVP, Crew Sync %, spread, `squad_title`, one cue
 
 ### 3.5 Video: what the caller sees
 
-**`render.py`** (1357) — OpenCV on a BGR canvas. `W, H = 720, 1280`; `canvas_size(src_w, src_h)` picks landscape 1280×720
+**`render.py`** (1367) — OpenCV on a BGR canvas. `W, H = 720, 1280`; `canvas_size(src_w, src_h)` picks landscape 1280×720
 for a wide source; `to_canvas` crops only what the aspect forces; `safe_box` keeps everything clear of FaceTime's controls
 (portrait: 9 % top, 15 % bottom, 5 % sides).
-- Entry points: `compose(frame, lm, hud, ghost, size, squad_lms)` (a phrase in progress), `compose_idle(frame, lm, ...,
-  state, avatar_state, menu, setup, recap, caption, compare, brk, board, players, hints)` (everything else),
-  `draw_card(...)` (the end card: `draw_photo_card` finish-pose photo with grade ring, brag pills, XP, kit sticker, code
+- Entry points: `compose(frame, lm, hud, ghost, size, squad_lms)` (a phrase in progress; `hud['mood']`), `compose_idle(frame,
+  lm, ..., state, avatar_state, menu, setup, recap, caption, compare, brk, board, players, hints, mood)` (everything else),
+  `draw_card(...)` (the end card: `draw_photo_card` finish-pose photo with grade ring, brag pills, XP, the kit sticker in the
+  grade's mood (`mood_for_grade`: S/A pumped, B happy, C/D encourage), a pink SCREENSHOT THIS pill over the code plate, code
   tiles and QR; `_draw_classic_card` for squads/unscored), `visibility(lm)`, `framing_hint(parts)`, `mirror_view`.
 - Elements: `draw_figure` (caller in paper with a head ring, never covering the face), `draw_ghost` (cyan, hip-anchored at
   torso scale, upper-only when legs are hidden; `ghost_placement`), `draw_panel` (the reference in a corner panel),
-  `draw_badge` (Brodie's PiP tile), `draw_state_chip` (WATCH / WITH ME / YOUR TURN / SETUP / READY? ...), `draw_score_block`,
+  `draw_badge` (Brodie's PiP tile, with `mood`), `draw_state_chip` (WATCH / WITH ME / YOUR TURN / SETUP / READY? ...), `draw_score_block`,
   `draw_battle` (HP bar), `draw_squad_strip`/`draw_squad_counts`, `draw_beat_dots` (count tiles), `draw_judgments`
   (PERFECT / NICE / MISS pops), combo edge glow, `draw_tip`, `draw_gesture_ring`, `draw_main` (5-6-7-8 count-in, reveals),
   `draw_pose_step`, `draw_reveal`/`draw_score_card`/`draw_squad_reveal`, `draw_recap`, `draw_overlays` (confetti, flash,
   K.O., level-up, achievements, MVP), `draw_chat` (speech bubble + hints), `draw_caption`, `draw_paused`, `draw_safety_card`,
   `draw_mode_cards` (the six cards with a lit/picked halo), `draw_setup_view` (head circle, body box, BODY/DISTANCE/LIGHT
   pills, arrows), `draw_break` (NEXT MOVE / BACK TO START ring with the next first pose), `draw_compare` (telephone
-  before/you), `qr_payload`/`qr_matrix`/`draw_qr` (`segno`).
-- Env: `DANCE_PUBLIC_URL` (QR fallback when no handle). Palette: volt `#D9FF3D`, pink `#FF3DA8`, cyan `#3DE0FF`, amber
+  before/you), `qr_payload`/`qr_matrix`/`draw_qr` (`segno`). `qr_payload(handle, code)`: with `DANCE_PUBLIC_URL` and a code,
+  the result page `{base}/r/{code}` (backend, section 4: the score, a Call Brodie FaceTime button, preview-card tags); else
+  `facetime:<handle>`; else no QR.
+- Env: `DANCE_PUBLIC_URL` (the backend's public address; the QR target), `DANCE_CALL_HANDLE`. Palette: volt `#D9FF3D`, pink `#FF3DA8`, cyan `#3DE0FF`, amber
   `#FFB13D`, red `#FF4D5E`, ink `#0A0A0B`, paper `#F4F4F0`.
 - A legacy layer (`draw_topbar`, `draw_timeline`, `draw_chips`, `draw_history`, `draw_combo`, `draw_menu`,
   `draw_progress_row`, `draw_skeleton`, `to_portrait`) is still defined but no longer called.
@@ -372,8 +381,15 @@ for a wide source; `to_canvas` crops only what the aspect forces; `safe_box` kee
 Jakarta Sans from `assets/fonts` (Hershey fallback).
 **`fx.py`** (79) — `FxQueue` of timed effects (`judgment` 0.65 s, `tip`, `combo`, `confetti`, `levelup`, `achievement`,
 `grade_stamp`, `flash`, `ko`, `mvp`), easing helpers, analytic `confetti_particles`.
-**`avatar.py`** (172) — Brodie from the kit's `brodie-sit-wave.png` only: `grin` / `closed` / `sleepy` variants, states
-idle, listening (volt ring), speaking (mouth alternates 7 Hz), thinking (dots), offline; `draw`, `draw_tile` (PiP).
+**`avatar.py`** (240) — Brodie from kit art only (`brodie-sit-wave.png`, and `brodie-flex.png` for one mood). States: idle,
+listening (volt ring), speaking (mouth alternates 7 Hz), thinking (dots), offline (`sleepy`). **Moods** (`MOODS`, set by
+`live.py`): `happy` (the sit-wave art: wink + grin), `pumped` (the kit's flex pose), `focus` (both eyes open, brow bars lowered
+toward the middle, closed smile), `encourage` (both eyes open, brow bars raised in the middle, closed smile). Feature edits stay
+inside the kit's locked traits: `_erase_stroke` paints canon cream over one ink stroke (the dark component nearest a measured
+centre, never a neighbouring outline), `_open_face` adds an open eye in the other eye's own ink and redraws the brows as ink bars,
+`_closed_mouth` is the small closed smile. Sprites: `grin` / `closed` / `sleepy` + `<mood>_grin` / `<mood>_closed`
+(`variant_for(mood, mouth)`); `variant(state, t, mood)`, `draw(..., mood)`, `draw_tile(..., mood)` (PiP). Every frame passes
+`check_cream.py` (`test_avatar_is_kit_compliant`).
 **`screens.py`** (83) — `draw_code_tiles`, `draw_board` (daily top five), `draw_squad_tags` (colour pill over each head).
 **`assets/brodie/`** — the official kit: `KIT_README.md` (cream `#EFE7DA` body, ink outline, locked features),
 `brodie.json` (machine spec, QA thresholds), art PNGs, `tools/check_cream.py` (fails on any non-cream body; run by
@@ -402,14 +418,15 @@ name hashed), `close`. The summary is POSTed to `/events` by `live.py`.
 
 ### 3.8 Tests, eval, offline tools
 
-**`tests/`** — 107 test functions, **165 collected cases** (`python -m pytest team/dance/tests -q`):
+**`tests/`** — 110 test functions, **168 collected cases** (`python -m pytest team/dance/tests -q`):
 `test_scoring` (8: selftest, DTW identity, degradations, engine states, freestyle), `test_ingest` (2), `test_handedness` (2:
 mirror convention, cue names the caller's own side), `test_modules` (16: progression, choreo, feedback, gestures, telemetry,
 tracker, text/fx), `test_modules2` (10: cues, style vocab, ghost, addressed, answers, noise cancellation, pacing, guards,
 screens; the `RoomOptions` swap survives `_ensure_options`), `test_orient` (5), `test_tracker` (5: crossings, re-ID, walk-ins, children, crowd), `test_phase1` (9: codes vs
-count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (7: FastAPI
-`TestClient` on a temp DB: codes/duels, chains, classes, profiles, boards/funnel, forget me, metrics), `test_live` (43
-functions, 101 cases: `classify` phrasings, flow, speaker queue, offers, space/ready waits, tools guarded, buttons, portrait
+count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (8: FastAPI
+`TestClient` on a temp DB: codes/duels, chains, classes, profiles, boards/funnel, forget me, metrics, the `/r/{code}` page with
+its preview tags and 1200×630 card), `test_live` (45 functions, 103 cases: kit compliance of every mood frame, moods from
+verdicts / scores / coach style, the QR opening the result page, `classify` phrasings, flow, speaker queue, offers, space/ready waits, tools guarded, buttons, portrait
 canvas, cards, kit compliance, photo card + QR, modes, pose step, depth cues, layered cues, the lite-model swap closing the old
 landmarker on the pose thread).
 
@@ -429,7 +446,7 @@ bound, `coach-video` published, metronome through the cue player, a scored round
 
 ## 4. `team/backend/` — FastAPI + Postgres (Supabase) or SQLite
 
-**`app.py`** (336) — routes (all JSON unless noted; CORS open). `_startup()` creates the tables with a few retries and
+**`app.py`** (392) — routes (all JSON unless noted; CORS open). `_startup()` creates the tables with a few retries and
 refuses to start on SQLite when a cloud marker is in the env (`REQUIRE_DATABASE_URL`, `RAILWAY_PROJECT_ID`, `RENDER`,
 `FLY_APP_NAME`, `VERCEL`), so a deployed box can never silently run on a file that the next restart wipes.
 
@@ -439,12 +456,13 @@ refuses to start on SQLite when a cloud marker is in the env (`REQUIRE_DATABASE_
 | Browser caller | `GET /join?prefix=demo-desk&facing=user&k=` mints a one-hour token for a fresh room (dispatch to `AGENT_NAME`, same default as the worker) and redirects to `GET /phone.html` (serves `team/web/phone.html`). `JOIN_KEY` set → `k` required. Needs `LIVEKIT_*` on the backend. The no-laptop way to call Brodie from a browser |
 | Results, codes | `POST /dance/result` → `{code, score100, ghost_token?, versus?, winner?, board?}`; `GET /dance/result/{code}`; `GET /dance/code/{code}` (what kind a spoken code is); `GET /dance/leaderboard?key&mode&since&limit`; `GET /dance/history?name`; `GET /dance/daily_played?name&key`; `GET /dance?key=` (HTML board) |
 | Profiles | `GET /dance/profile/{name}`; `POST .../award`; `POST .../prefs`; `DELETE /dance/profile/{name}` ("forget me": profile, results, ghosts, codes; chains/classes anonymised) |
-| Share funnel, boards | `POST /dance/share/{code}/start`; `GET /dance/share/{code}`; `GET /dance/funnel`; `GET /dance/board/{code}` (+ `/page` HTML) |
+| Share funnel, boards | `POST /dance/share/{code}/start`; `GET /dance/share/{code}`; `GET /dance/funnel` (+ `page_views`); `GET /dance/board/{code}` (+ `/page` HTML) |
+| Result link | `GET /r/{code}`: what the scorecard QR opens. The score and grade, a Call Brodie button (`facetime:<DANCE_CALL_HANDLE>`, else a link to `DANCE_SITE_URL`), "say battle <code>", and Open Graph / Twitter tags (`og:image` absolute via `DANCE_PUBLIC_URL`) so a pasted link unfurls; logs a `page_view` share. `GET /r/{code}/og.png`: the 1200×630 card (`og.py`, cached per code, `Cache-Control` 10 min) |
 | Ghosts | `POST /dance/ghost/{code}` (needs the winner's one-time token); `GET /dance/ghost/{code}` |
 | Telephone | `POST /dance/chain`; `POST /dance/chain/{code}/link`; `GET /dance/chain/{code}` (+ `/page` drift table) |
 | Class | `POST /dance/class`; `GET /dance/class/{code}`; `POST .../student`; `GET .../report`; `GET .../page` (heatmap HTML) |
 
-**`db.py`** (596) — tables `events`, `dance_results` (code UNIQUE, name, key, mode, total, rounds, score100, challenge),
+**`db.py`** (598) — tables `events`, `dance_results` (code UNIQUE, name, key, mode, total, rounds, score100, challenge),
 `dance_chains`, `dance_classes`, `dance_profiles` (xp, level, streak, achievements, prefs), `dance_shares`, `dance_ghosts`,
 `dance_ghost_tokens`. Codes are four digits, unique across all tables, freed after 30 days (`_free_old_codes`,
 `_release_code` takes the ghost, token and share history with it). `post_result` is shared by HTTP and the in-process fake.
@@ -460,6 +478,11 @@ TEXT, epoch seconds in REAL; `_ddl()` turns `INTEGER PRIMARY KEY` into `BIGSERIA
 Postgres. `_Row` makes psycopg rows behave like `sqlite3.Row`. `ping()` backs `/health`. Rollback is one env var: unset
 `DATABASE_URL` and everything is back on the SQLite file (nothing SQLite-side was removed; only the old Vercel `/tmp` default
 went, and a cloud marker now refuses SQLite instead). Locally `.env.local` has no `DATABASE_URL`, so the laptop runs on SQLite.
+
+**`og.py`** (98) — the preview card for a result link: Pillow, 1200×630, ink background, score + grade disc, the name, the
+mode pill, BEAT MY SCORE with the code as volt tiles, "FaceTime … and say 'battle <code>'", and kit Brodie on a cream disc in
+the grade's mood (loads `team/dance/avatar.py` by path; falls back to the kit profile picture without OpenCV). Never a photo of the
+dancer. Fonts from `team/dance/assets/fonts`. Needs `pillow` (`team/backend/requirements.txt`).
 
 **`dbcheck.py`** (33) — round trip against the configured engine (init, write, read, award, forget me). **`import_sqlite.py`**
 (44) — one-time copy of a `team.db` into Postgres (`ON CONFLICT DO NOTHING`, serial counters moved past the imported ids).
@@ -650,8 +673,9 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 |---|---|---|
 | `KEY`, `MODE`, `DIFFICULTY`, `CODE` | generated hip-hop, `learn`, `beginner`, none | what the session starts with |
 | `TEMPO`, `RTT`, `FPS`, `POSE`, `POSE_PX`, `MAX_POSES` | 1.0, 0.3 s, 15, `full`, 384, 4 | engine clock and pose input |
-| `CALL_HANDLE` | unset | the line's FaceTime address; the scorecard QR opens `facetime:<handle>` (no QR when unset) |
-| `PUBLIC_URL` | unset | QR fallback to the board page |
+| `CALL_HANDLE` | unset | the line's FaceTime address: the result page's Call Brodie button and the preview card; the QR opens `facetime:<handle>` when there is no public URL |
+| `PUBLIC_URL` | unset (Railway: its domain) | the backend's public address: the scorecard QR opens `<url>/r/<code>`; absolute `og:image` links |
+| `SITE_URL` | `https://brodiegroove.vercel.app/` | backend only: the result page's link when no handle is set |
 | `LOBBY`, `UPPER`, `CANVAS` | 1, 0, `auto` | chat gates on/off; arms-only; portrait/landscape |
 | `MIRROR_VIEW`, `IGNORE_FEET`, `DEPTH_GATE` | 1, 1, 0 | mirror the display; never require feet; mask ambiguous joints from scoring |
 | `MIN_VISIBLE`, `PARTIAL_ARMS`, `GREEN_DEG`, `AMBER_DEG`, `HALF_MARKS_DEG` | 0.6, 0.7, 18, 32, 20 | scoring thresholds |
@@ -696,7 +720,7 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 
 ## 13. Known mismatches between docs and code (fix the doc or the code; list kept here until done)
 
-- Root `README.md` says 13 Gemini tools and 53 tests; the code has **14 tools** and **165 collected tests**.
+- Root `README.md` says 13 Gemini tools and 53 tests; the code has **14 tools** and **168 collected tests**.
   `team/dance/README.md` lists 11 tools (misses `propose_activity`, `confirm_start`, `caller_answered`).
 - Root `README.md` says the starter is unchanged except "a Windows signal guard, a Gemini instruction prefix, per-call
   recordings"; the diff is two files (guard, prefix) plus `requirements.txt`. Recordings are ours (`telemetry.py`, `DANCE_DEBUG_MP4`).
