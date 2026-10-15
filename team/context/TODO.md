@@ -3,7 +3,7 @@
 Ranked. `[ ]` open, `[~]` started, `[x]` done, `[!]` blocked. Tick things here; write the story of how in `../PROGRESS.md`;
 when a tick changes what works, update `STATUS.md`; when it changes a file's role, update `CODEBASE.md`.
 Sources folded in: `PLANNED_IMPROVEMENTS.md`, `team/docs/AUDIT_2026-10-11.md`, `CONVERSATION.md` §8,
-`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-13, 12:45 ET.
+`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-15.
 
 The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every engineering item below should earn a post.
 
@@ -56,6 +56,10 @@ Wrapped" card. Keep battle, telephone and class as spoken words that work, not a
 
 ## 2. Quick wins (hours each, ranked by value per minute)
 
+- [x] **Responsive portrait phone caller**: portrait camera capture on narrow screens, safe-area-aware layout, and touch-sized
+      controls in `team/web/phone.html` (2026-10-15); physical iOS/Android validation remains open below.
+- [ ] **Validate the phone caller on real iOS Safari and Android Chrome**, including camera/mic permissions, controls, and
+      visibility of the full portrait coach video.
 - [ ] **"Ready" button on `team/web/phone.html`** mapped to the affirm path in `live.button_cmd` (about six lines);
       makes laptop filming reliable when Gemini mishears "ready".
 - [ ] **Shorter waits in `demo-` rooms**: `wait_choice` reprompts after 18 s; use 6 s when `lobby_enabled` is off.

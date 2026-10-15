@@ -496,10 +496,11 @@ and `dance_loop.ps1` use this; with `DATABASE_URL` set the in-process copy also 
 
 ## 5. `team/web/`
 
-- **`phone.html`** (133) — any browser as the caller. Loads `livekit-client` from jsdelivr; params `url`, `token`, `facing`,
-  `autojoin=1`, `debug=1`. Publishes the camera as `facetime-remote-video` (1280×720, no simulcast) and the mic as
-  `facetime-remote-audio` (the Chert bridge's names, so the worker binds to either), shows the worker's video full screen,
-  plays its audio, and sends `{"type":"dance_cmd","cmd":...}` data messages from the Pause / Repeat / Slower / Stop buttons.
+- **`phone.html`** (141) — any browser as the caller. Loads `livekit-client` from jsdelivr; params `url`, `token`, `facing`,
+  `autojoin=1`, `debug=1`. Uses portrait camera capture on narrow/portrait devices and landscape on desktop, keeps the
+  worker's video full-screen, and fits setup, status and touch controls to phone widths and safe areas. Publishes the camera
+  as `facetime-remote-video` (no simulcast) and the mic as `facetime-remote-audio` (the Chert bridge's names, so the worker
+  binds to either), plays its audio, and sends `{"type":"dance_cmd","cmd":...}` from Pause / Repeat / Slower / Stop.
 - **`groove/index.html`** (1237) — the landing page (https://brodiegroove.vercel.app/), self-contained: hero with a beat
   clock, demo phone mock, a 16-note rhythm mini-game, the six mode cards, coach styles, the 60/30/10 scoring section, the
   flow diagram, FAQ, final CTA, waitlist modal. `CALL_URL = ''` (every "Call" button opens the waitlist);
