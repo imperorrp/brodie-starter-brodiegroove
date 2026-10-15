@@ -63,8 +63,8 @@ commit and successful health check after each push; an enabled trigger alone doe
 See [Railway GitHub autodeploy requirements](https://docs.railway.com/deployments/github-autodeploys).
 
 `DANCE_LIBRARY_URL` is configured as a Railway service variable using the team's private signed Storage URL.
-The supplied ZIP contains 24 AIST keys and one class key. Its contents passed local loading, generation across
-all eight styles and three levels, and daily generation. The signed URL expires 2027-10-15; replace the variable
+The supplied ZIP contains 24 AIST keys and one class key. The deployed service loaded 29 total keys and passed generation across
+all eight styles and three levels, and daily generation inside Railway (2026-10-15). The signed URL expires 2027-10-15; replace the variable
 before expiry. Keep both the URL and the research-licensed ZIP out of Git. Boot logs should confirm keys loaded.
 
 The compatibility fixes are versioned so GitHub builds retain the working runtime recipe.
