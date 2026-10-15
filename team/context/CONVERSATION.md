@@ -33,8 +33,8 @@ words), `addressed.py` / `answers.py` (was that said to Brodie, was that a yes),
 | Judging | `scoring.py`: banded DTW over the angle channels on a beat grid | live angles vs the reference | 0-100 = 60 shape + 30 timing + 10 energy, a verdict per count |
 | Tips | `feedback.py` | per-count signed errors, 3D body signals | up to three ranked corrections (shape, depth/facing, timing, size) |
 | Coaching words | `cues.py` + `style_vocab.py` | the reference itself | per count: arm positions, level, bounce, weight, facing, hit vs flow; a move name; a feel line per style |
-| Routines | `choreo.py` | style + level (beginners 2 steps, then 3 / 4); daily is date-seeded | stitched AIST++ phrases (no authored text) |
-| Gestures | `gestures.py` | landmarks | both hands up held still 1 s = yes / pick the lit card; crossed arms 1.2 s = pause. A hold that already answered something must come down before it counts again |
+| Routines | `choreo.py` | style + level (beginners 2 steps, then 3 / 4); daily is date-seeded | stitched AIST++ phrases (no authored text); without the AIST keys (the cloud box), the tracked Commons clips |
+| Gestures | `gestures.py` | landmarks | both hands up (straight up is enough) held still 1 s = yes / pick the lit card; crossed arms 1.2 s = pause. Jitter and dropouts under 0.4 s don't restart a hold; wrists out of the top of the frame fall back to the elbows. A hold that already answered something must come down before it counts again |
 
 ## 2. The prompt chain (exactly what Gemini receives)
 

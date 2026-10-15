@@ -57,18 +57,24 @@ def phrase_complexity(key, i):
     return vel + 4.0 * float(np.mean(E)) if len(E) else vel
 
 
-def index():
-    """[{key, phrase, bpm, per_beat, complexity, tier}] over the AIST library phrases (the stitchable pool). Cached."""
-    global _INDEX
-    if _INDEX is not None: return _INDEX
+def _rows(keys):
     rows = []
-    for k in list_keys():
-        name = k.get('name', '')
-        if 'error' in k or not name.startswith('aist_'): continue
+    for name in keys:
         key = _key(name)
         for i in range(len(key['phrases'])):
             if key['phrases'][i]['beats'] < 8: continue
             rows.append(dict(key=name, phrase=i, bpm=float(key['bpm']), per_beat=int(key['per_beat']), complexity=phrase_complexity(key, i)))
+    return rows
+
+
+def index():
+    """[{key, phrase, bpm, per_beat, complexity, tier}] over the AIST library phrases (the stitchable pool). Cached. Without the AIST
+    keys (git-ignored, so absent on a fresh clone and the cloud box) the tracked Commons keys (cc_*) are the pool, so every mode still
+    gets a routine instead of a "glitched" on the caller's yes."""
+    global _INDEX
+    if _INDEX is not None: return _INDEX
+    names = [k.get('name', '') for k in list_keys() if 'error' not in k]
+    rows = _rows([n for n in names if n.startswith('aist_')]) or _rows([n for n in names if n.startswith('cc_')])
     if rows:
         c = np.array([r['complexity'] for r in rows]); lo, hi = np.quantile(c, [1 / 3, 2 / 3])
         for r in rows: r['tier'] = 'beginner' if r['complexity'] <= lo else 'intermediate' if r['complexity'] <= hi else 'advanced'
@@ -93,7 +99,7 @@ def pool(style):
             if (r['key'], r['phrase']) not in seen: seen.add((r['key'], r['phrase'])); out.append(r)
         return out
     prefixes = STYLE_POOLS.get(style, STYLE_POOLS['hiphop'])
-    return [r for r in rows if r['key'].startswith(prefixes)]
+    return [r for r in rows if r['key'].startswith(prefixes)] or rows      # a style the library lacks borrows the whole pool
 
 
 def _pick(rows, level, n, rng):

@@ -6,7 +6,7 @@ file map in `CODEBASE.md`.
 
 **As of 2026-10-15 (temporary Railway deployment).** The backend and LiveKit agent are deployed with Railway Postgres; the portrait-phone update (`8e4f724`) is live. HTTPS/database health, protected browser join dispatch, database write/read/delete, full/lite pose-model inference, Gemini relay session setup, and LiveKit registration/Chert waiting-room membership passed. The user reports FaceTime now works; individual audio/video directions have not been independently accepted here. The operator-Mac Chert connector runs continuously under a login service; graceful no-call release/restart was verified. Vercel remains unchanged.
 
-The deployment fixes are now versioned: Railpack/CPU dependencies with EGL/GLES, database-dependent HTTP health, and access-log suppression for join credentials. GitHub write access is confirmed, but native autodeploy remains blocked by the missing Railway GitHub App installation. The repository owner must authorize that app, then enable the `main` trigger. The private AIST library is still unavailable (four tracked reference keys, zero AIST phrases); generated routines and daily challenges remain blocked.
+The deployment fixes are now versioned: Railpack/CPU dependencies with EGL/GLES, database-dependent HTTP health, and access-log suppression for join credentials. GitHub write access is confirmed, but native autodeploy remains blocked by the missing Railway GitHub App installation. The repository owner must authorize that app, then enable the `main` trigger. The private AIST library is still unavailable (four tracked reference keys, zero AIST phrases). A phone tester on 2026-10-15 hit "Sorry, I glitched" after every yes (routine generation raised on the empty pool) and a hands-up that never counted; both are fixed in code (routines fall back to the tracked Commons keys; a forgiving hands-up detector), unit + sim verified on a four-key library, **not yet redeployed or retried on a phone**.
 
 Upstream team status, 2026-10-15 about 01:45 ET (its cloud deployment statement predates the temporary operator deployment above): Tuesday's features are built: Brodie's face has moods (kit art only), and the scorecard
 QR opens a result page `/r/<code>` that unfurls as a preview card when pasted (it needs the deployed backend to be reachable). The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
@@ -46,7 +46,7 @@ webcam) → **Chert line held** (`chert dev` connected from Windows) → **FaceT
 | Teaching ladder: pose-by-pose first look, freeze practice, with-me, scored tries up the tempo ladder, breakdown on misses, loops of weak counts, combined steps, full-speed challenge | `live.learn`, `posestep.py`, `pacing.py` | unit + sim; not yet by a person on the current build |
 | Modes: Ghost Battle (3 rounds, HP, win-only codes, saved ghosts with tokens), Daily (one posted shot, board), Squad (2–4 in one camera, colour tags, Crew Sync, MVP), Telephone (chains, drift page), Class (teacher records, students by code, report + heatmap page) | `live.py`, `squad.py`, `ghost.py`, backend | unit + sim; squad and class never with real people |
 | Multi-person tracking, re-ID by torso colour, swap fix, primary-dancer lock | `tracker.py`, `multipose.py` | unit (`test_tracker`) + sim; 4 poses at 384 px cost 237 ms/frame on this laptop (solo at 320 px: 50 ms median) |
-| Gestures (hands up = yes/ready, crossed arms = pause), hands-up card picker | `gestures.py` | unit + sim |
+| Gestures (hands up = yes/ready, crossed arms = pause), hands-up card picker | `gestures.py` | unit + sim; on a real phone (2026-10-15) the old detector never fired for hands straight up; loosened and jitter/dropout-tolerant since, not yet retried on a phone |
 | Noise: Krisp BVC + AGC into Gemini, "was that said to Brodie" scoring, answer confidence, "Was that a yes?", local VAD barge-in over the music | `audio_in.py`, `addressed.py`, `answers.py`, `live.vad_listener` | unit + sim (`choose_noise`, `garbled_answers`); BVC only on LiveKit Cloud; not yet on a call with real room noise. **On this laptop** BVC is off (`livekit-plugins-noise-cancellation` not installed in `.venv`) and the local VAD barge-in dies at call start (`livekit-local-inference` is stubbed); AGC is on |
 | Dead-air watchdog, safety stop on pain words, "forget me" twice, call cap, frozen video, phone moved, backlight, fall check | `watchdog.py`, `guards.py`, `live._guards` | unit + sim; the budget guard's lite-model swap on a real call (it deadlocked the worker until 2026-10-12; now human Chrome) |
 | 14 Gemini function tools backed by the session | `tools.py` | unit (every tool refuses to start a dance) + sim; on a human Chrome call (2026-10-12) Gemini called `propose_activity` and `confirm_start`, both ok; the other 12 not yet seen live (`DANCE_TOOLS=0` is the fallback) |
@@ -60,7 +60,7 @@ webcam) → **Chert line held** (`chert dev` connected from Windows) → **FaceT
 | Telemetry per call, `GET /metrics`, eval report, cue review CSV | `telemetry.py`, `eval/run_eval.py` | in place; eval needs the laptop to itself |
 | Landing page, waitlist, promo kit (8 days of posters, stories, reels, captions), pitch video, generated film | `web/groove`, `promo/`, `video/` | rendered on this laptop |
 
-Counts at the last pass: 168 pytest cases (110 functions, 10 files), 46 eval scenarios + duel, 14 selftest checks,
+Counts at the last pass: 171 pytest cases (113 functions, 10 files), 46 eval scenarios + duel, 14 selftest checks,
 20 HUD snapshots, 29 keys, 14 tools, 27 modules in `team/dance` plus tests and eval.
 
 ## 3. Known weaknesses (accepted for now, ranked by how much they hurt)
@@ -110,7 +110,7 @@ Counts at the last pass: 168 pytest cases (110 functions, 10 files), 46 eval sce
 ## 5. How to check the state quickly
 
 ```
-.venv\Scripts\python -m pytest -q team\dance\tests                 # 168 cases, 20-50 s (selftest's 25 ms compose check can flake when RAM is short)
+.venv\Scripts\python -m pytest -q team\dance\tests                 # 171 cases, 20-50 s (selftest's 25 ms compose check can flake when RAM is short)
 .venv\Scripts\python -m team.dance.offline_test selftest           # 14 checks
 .venv\Scripts\python -m team.dance.eval.run_eval --jobs 6          # 46 scenarios; run with nothing else up
 .venv\Scripts\python team\scripts\chrome_test.py                   # headless Chrome through the live worker

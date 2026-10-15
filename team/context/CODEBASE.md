@@ -182,7 +182,9 @@ with an injected clock and lag compensation (`rtt_s`).
 phrase): `count_cues`, `move_card(key, pi)` (name like "Bounce Reach", setup line, per-count cues, genre feel line),
 `count_line`, `intro_line`, `card_note` (≤ 60 words for Gemini). `style_vocab` maps AIST genre codes to authored feel lines.
 
-**`choreo.py`** (186) — routines stitched from library phrases by style and level; deterministic from their name.
+**`choreo.py`** (194) — routines stitched from library phrases by style and level; deterministic from their name. The pool is
+the `aist_*` keys; without them (git-ignored: a fresh clone, the cloud box) it is the tracked Commons `cc_*` keys, and a style with
+no phrases borrows the whole pool (so a yes never fails on "no library phrases").
 - `generate(style, level, n_phrases, seed, name)` → `gen_<style>_<level>_<seed>`, `daily(date)` → `gen_daily_<yyyymmdd>`,
   `load_any(name)` (dispatches `gen_*` to a rebuild, else `load_key`), `with_combined`, `with_half`, `with_counts`,
   `routine_seconds`, `phrase_complexity` (tertiles = beginner / intermediate / advanced), `STYLE_POOLS`, `DAILY_ROTATION`,
@@ -340,9 +342,10 @@ centre band 0.25–0.75); `SetupTracker.update` reports one stable issue (held 2
 good frames over 1.5 s); `lines_for(issue, upper, checkin)` the exact second-person lines; `camera_note` the
 `[camera now: ...]` note for Gemini; `SHORT` on-screen labels. Feet are never required.
 
-**`gestures.py`** (68) — `classify(lm)` → `ready` (both hands up, wide) / `pause` (arms crossed overhead); `GestureDetector`
-fires once after a still hold (1.0 s / 1.2 s), 2 s cooldown, `reset()` blocks a hold until the hands come down, `progress`
-for the HUD ring.
+**`gestures.py`** (104) — `classify(lm)` → `ready` (both hands above the nose, ≥ `READY_GAP` 0.5 shoulder widths apart; an
+elbow stands in for a wrist out of the frame) / `pause` (arms crossed overhead); `GestureDetector` fires once after a still hold
+(1.0 s / 1.2 s; stillness over `STILL_WINDOW_S` 0.25 s; a dropout ≤ `GRACE_S` 0.4 s keeps the hold), 2 s cooldown, `reset()`
+blocks a fired hold until the hands are down for `GRACE_S`, `progress` for the HUD ring.
 
 **`guards.py`** (59) — `FrameBudget` (5 s median over 55 ms → `lite` model, then 12 fps), `CameraShift` (phase correlation
 on a 64×48 frame: the phone moved), `VideoFreeze` (1.5 s unjudged, 4 s abort).
@@ -418,9 +421,10 @@ name hashed), `close`. The summary is POSTed to `/events` by `live.py`.
 
 ### 3.8 Tests, eval, offline tools
 
-**`tests/`** — 110 test functions, **168 collected cases** (`python -m pytest team/dance/tests -q`):
+**`tests/`** — 113 test functions, **171 collected cases** (`python -m pytest team/dance/tests -q`):
 `test_scoring` (8: selftest, DTW identity, degradations, engine states, freestyle), `test_ingest` (2), `test_handedness` (2:
-mirror convention, cue names the caller's own side), `test_modules` (16: progression, choreo, feedback, gestures, telemetry,
+mirror convention, cue names the caller's own side), `test_modules` (19: progression, choreo incl. no AIST library, feedback,
+gestures incl. phone hands-up, telemetry,
 tracker, text/fx), `test_modules2` (10: cues, style vocab, ghost, addressed, answers, noise cancellation, pacing, guards,
 screens; the `RoomOptions` swap survives `_ensure_options`), `test_orient` (5), `test_tracker` (5: crossings, re-ID, walk-ins, children, crowd), `test_phase1` (9: codes vs
 count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (9: FastAPI
@@ -746,8 +750,9 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 - `scipy` is imported by `music.py`, `film/audio.py`, `film/score.py`, `tracker.py` (optional); it is in `team/cloud/requirements.txt`
   but still not in the root `requirements.txt`.
 - The temporary cloud box is deployed with Railway Postgres (2026-10-14): HTTPS health, keyed join redirect,
-  database write/read/delete, and LiveKit agent dispatch passed. The private AIST library is unavailable, so generated
-  routines and daily challenges remain blocked. The official operator-Mac Chert connector runs continuously under a login service, with clean no-call release/restart verified; no FaceTime media acceptance has occurred. The current builder needs `railpack.json` and explicit service
+  database write/read/delete, and LiveKit agent dispatch passed. The private AIST library is unavailable there; since 2026-10-15
+  routines and the daily are stitched from the three tracked Commons keys instead (before that every mode crashed on the caller's
+  yes with "Sorry, I glitched"), so all routines use one dancer's phrases until the AIST keys are rebuilt there. The official operator-Mac Chert connector runs continuously under a login service, with clean no-call release/restart verified; no FaceTime media acceptance has occurred. The current builder needs `railpack.json` and explicit service
   start/health/restart settings; `nixpacks.toml` is retained only as the legacy recipe.
 - `chrome_test.py` reads `--worker-log` as UTF-8; a log written by Windows PowerShell's `*>` redirect is UTF-16 and shows "(none)".
   `chrome.ps1`'s worker logs only to its own window, so the default `worker_dance5.log` is usually stale.

@@ -75,6 +75,19 @@ def test_choreo_combined_and_pools():
     assert choreo.generate('krump', 'advanced', seed=1)['difficulty'] == 3
 
 
+def test_choreo_without_aist_library(monkeypatch):
+    """The cloud box and a fresh clone have no AIST keys (git-ignored): every mode's yes crashed into "Sorry, I glitched" (2026-10-15).
+    The tracked Commons keys are the pool then, for every style and the daily."""
+    tracked = [k for k in choreo.list_keys() if not k.get('name', '').startswith('aist_')]
+    monkeypatch.setattr(choreo, 'list_keys', lambda: tracked); monkeypatch.setattr(choreo, '_INDEX', None)
+    for style in ('hiphop', 'waack', 'fitness', 'krump'):
+        k = choreo.generate(style, 'beginner', seed=5)
+        assert k['phrases'] and all(m['src'].startswith('cc_') for m in k['moves'])
+        assert choreo.from_name(k['name'])['features'] == k['features']
+    assert choreo.daily('20261015')['moves']
+    monkeypatch.setattr(choreo, '_INDEX', None)
+
+
 # ---- feedback ----
 def _result_with(ch, signed, weak=(4, 5, 6)):
     cs = [[None] * len(CHANNELS) for _ in range(8)]
@@ -133,6 +146,41 @@ def test_gesture_hold_and_cooldown():
     assert 'pause' not in out
     g = gestures.GestureDetector(); out = [g.update(i / 15, up) for i in range(10)]
     assert not any(out)                                   # short hold
+
+
+def test_gesture_phone_hands_up():
+    """A live phone caller (2026-10-15): hands straight up, jittery landmarks, flickering wrists. Each must still be a yes."""
+    rng = np.random.default_rng(0)
+    straight = lambda: _person((0.6, 0.1), (0.4, 0.1))   # wrists ~1.25 shoulder widths apart, not a wide V
+    assert gestures.classify(straight()) == 'ready'
+    g = gestures.GestureDetector(); out = []
+    for i in range(30):                                   # +-1 % frame jitter on the wrists
+        p = straight(); p[[15, 16], :2] += rng.normal(0, 0.01, (2, 2)); out.append(g.update(i / 15, p))
+    assert 'ready' in out
+    g = gestures.GestureDetector(); out = []
+    for i in range(30):                                   # every fifth frame lost, or a wrist out of view
+        p = straight()
+        if i % 5 == 2: p = None
+        elif i % 5 == 4: p[15, 3] = 0.1; p[13, :2] = (0.58, 0.22); p[13, 3] = 0.1
+        out.append(g.update(i / 15, p))
+    assert 'ready' in out
+    p = straight(); p[[15, 16], 3] = 0.1; p[13, :2] = (0.6, 0.2); p[14, :2] = (0.4, 0.2)
+    assert gestures.classify(p) == 'ready'                # wrists past the top of a portrait frame: the elbows stand in
+
+
+def test_gesture_moving_or_blocked_never_fires():
+    g = gestures.GestureDetector(); out = []
+    for i in range(40):                                   # arms overhead, dancing: no yes
+        dx = 0.08 * math.sin(i)
+        out.append(g.update(i / 15, _person((0.65 + dx, 0.1), (0.35 + dx, 0.1))))
+    assert 'ready' not in out
+    up = _person((0.6, 0.1), (0.4, 0.1)); down = _person((0.6, 0.6), (0.4, 0.6))
+    g = gestures.GestureDetector(); out = [g.update(i / 15, up) for i in range(20)]
+    assert 'ready' in out
+    g.reset(); out = [g.update(2 + i / 15, up if i % 6 else down) for i in range(60)]   # a one-frame dip doesn't unblock the old hold
+    assert 'ready' not in out
+    out = [g.update(7 + i / 15, down) for i in range(10)] + [g.update(8 + i / 15, up) for i in range(20)]
+    assert 'ready' in out                                 # down for real, then a fresh hold
 
 
 # ---- telemetry ----

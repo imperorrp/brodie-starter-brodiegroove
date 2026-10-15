@@ -15,7 +15,12 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
 - [x] Temporary deployment preparation (2026-10-14): separate checkout, official Mac CLI on Node 22, Railway service/domain; DB-dependent HTTP status, secret-safe access logging, and a Railpack translation of the legacy Nixpacks build.
 - [x] Temporary Railway deployment: supplied credentials, PostgreSQL roundtrip, HTTPS health, keyed join dispatch and browser rendering, LiveKit registration/doctor dispatch, Gemini Live setup, and assigned Chert project confirmed.
 - [x] Verify full/lite pose loading and blank-frame inference remotely after adding missing EGL/GLES native libraries.
-- [!] Private AIST library unavailable: generated routines and daily challenges require the team to obtain/rebuild the keys.
+- [x] Phone tester (2026-10-15): every mode said "Sorry, I glitched" after the camera-check offer. Cause: no AIST keys on Railway,
+      so `choreo.generate` raised on the yes. Routines now fall back to the tracked `cc_*` keys. Redeploy Railway to ship it.
+- [x] Phone tester (2026-10-15): both hands up was drawn on the skeleton but never counted as a yes. The detector needed a wide V
+      and a perfect frame run; now hands straight up count, with jitter/dropout tolerance and an elbow stand-in. Needs a phone call to confirm.
+- [!] Private AIST library unavailable on the cloud box: routines there use only the three Commons keys (one BPM group, so mostly
+      `cc_pm_dancer`) until the team obtains/rebuilds the AIST keys.
 - [ ] Supervised media test when requested: caller audio, agent audio, caller video, agent video, and cleanup separately. The user authorized continuous Chert connector operation; the operator login service is running, with clean no-call stop/release/restart verified.
 
 - [x] Submission issue opened on `seraphimlabs-dev/brodie-starter` (2026-10-11).
