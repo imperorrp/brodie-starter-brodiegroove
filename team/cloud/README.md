@@ -56,15 +56,19 @@ Supabase gives you one more thing worth keeping: the dashboard **Table editor** 
    throughout testing. Ctrl+C releases the line. Railway does not start this connection. Do not use a shared line without
    assignment confirmation; a real FaceTime call needs the test operator's go-ahead.
 
-The temporary service's GitHub source is this repository, with `main` intended as its deployment branch.
-Native autodeploy is currently blocked by the missing Railway GitHub App installation. The repository owner must
-install/authorize the app for this repo; then enable autodeploy in the Railway service's source settings and verify
-that a push to `main` produces a successful deployment. The root build config has no watch-path filter, so all
-commits on the connected branch can deploy. A source connection alone does not prove automatic deployment is enabled.
+The temporary service uses native GitHub autodeploy from this repository's `main` branch (enabled 2026-10-15).
+Railway recognizes the GitHub App installation and has an enabled `main` deployment trigger. The root build
+config has no watch-path filter, so all commits on the connected branch can deploy. Check the deployment's
+commit and successful health check after each push; an enabled trigger alone does not prove a build succeeded.
 See [Railway GitHub autodeploy requirements](https://docs.railway.com/deployments/github-autodeploys).
 
-The proven compatibility fixes are versioned so GitHub builds use the same runtime recipe as the working CLI upload.
-Until autodeploy is enabled, deploy manually with `railway up --service brodie` from the linked checkout.
+`DANCE_LIBRARY_URL` is configured as a Railway service variable using the team's private signed Storage URL.
+The supplied ZIP contains 24 AIST keys and one class key. Its contents passed local loading, generation across
+all eight styles and three levels, and daily generation. The signed URL expires 2027-10-15; replace the variable
+before expiry. Keep both the URL and the research-licensed ZIP out of Git. Boot logs should confirm keys loaded.
+
+The compatibility fixes are versioned so GitHub builds retain the working runtime recipe.
+For an emergency manual deployment, use `railway up --service brodie` from the linked checkout.
 Rollback: Railway > Deployments > an earlier one > **Redeploy**. Logs: Railway > the service > **Logs**.
 Deployments preserve the Postgres volume. To stop this temporary setup, disable any active deployment trigger first,
 then stop the `brodie` and `Postgres` Railway deployments and gracefully stop the operator-Mac Chert connector.

@@ -750,9 +750,7 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 - `scipy` is imported by `music.py`, `film/audio.py`, `film/score.py`, `tracker.py` (optional); it is in `team/cloud/requirements.txt`
   but still not in the root `requirements.txt`.
 - The temporary cloud box is deployed with Railway Postgres (2026-10-14): HTTPS health, keyed join redirect,
-  database write/read/delete, and LiveKit agent dispatch passed. The private AIST library is unavailable there; since 2026-10-15
-  routines and the daily are stitched from the three tracked Commons keys instead (before that every mode crashed on the caller's
-  yes with "Sorry, I glitched"), so all routines use one dancer's phrases until the AIST keys are rebuilt there. The official operator-Mac Chert connector runs continuously under a login service, with clean no-call release/restart verified; no FaceTime media acceptance has occurred. The current builder needs `railpack.json` and explicit service
+  database write/read/delete, and LiveKit agent dispatch passed. The supplied private AIST library is now configured through `DANCE_LIBRARY_URL` (2026-10-15): 24 AIST keys and one class key, with 24 indexed AIST phrases verified locally. Without that library, routines fall back to the three tracked Commons keys. Native GitHub autodeploy from `main` is enabled. The official operator-Mac Chert connector runs continuously under a login service, with clean no-call release/restart verified; no FaceTime media acceptance has occurred. The current builder needs `railpack.json` and explicit service
   start/health/restart settings; `nixpacks.toml` is retained only as the legacy recipe.
 - `chrome_test.py` reads `--worker-log` as UTF-8; a log written by Windows PowerShell's `*>` redirect is UTF-16 and shows "(none)".
   `chrome.ps1`'s worker logs only to its own window, so the default `worker_dance5.log` is usually stale.

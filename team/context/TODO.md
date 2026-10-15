@@ -10,7 +10,7 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
 ## 0. Now (before Monday's launch post)
 
 - [x] Version the proven Railway compatibility fixes so GitHub builds retain the working runtime.
-- [!] Enable `main`-push autodeploy after the repository owner authorizes the Railway GitHub App; write access is confirmed, but Railway reports `NO_INSTALLATION`.
+- [x] Enable native `main`-push autodeploy after the repository owner authorizes the Railway GitHub App (2026-10-15); Railway confirms the enabled branch trigger.
 
 - [x] Temporary deployment preparation (2026-10-14): separate checkout, official Mac CLI on Node 22, Railway service/domain; DB-dependent HTTP status, secret-safe access logging, and a Railpack translation of the legacy Nixpacks build.
 - [x] Temporary Railway deployment: supplied credentials, PostgreSQL roundtrip, HTTPS health, keyed join dispatch and browser rendering, LiveKit registration/doctor dispatch, Gemini Live setup, and assigned Chert project confirmed.
@@ -19,8 +19,7 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
       so `choreo.generate` raised on the yes. Routines now fall back to the tracked `cc_*` keys. Redeploy Railway to ship it.
 - [x] Phone tester (2026-10-15): both hands up was drawn on the skeleton but never counted as a yes. The detector needed a wide V
       and a perfect frame run; now hands straight up count, with jitter/dropout tolerance and an elbow stand-in. Needs a phone call to confirm.
-- [!] Private AIST library unavailable on the cloud box: routines there use only the three Commons keys (one BPM group, so mostly
-      `cc_pm_dancer`) until the team obtains/rebuilds the AIST keys.
+- [x] Configure the supplied private AIST library in Railway (2026-10-15): ZIP validated with 24 AIST keys and one class key; all styles/levels and daily generation passed locally. Keep the signed URL out of Git and renew before 2027-10-15.
 - [ ] Supervised media test when requested: caller audio, agent audio, caller video, agent video, and cleanup separately. The user authorized continuous Chert connector operation; the operator login service is running, with clean no-call stop/release/restart verified.
 
 - [x] Submission issue opened on `seraphimlabs-dev/brodie-starter` (2026-10-11).
