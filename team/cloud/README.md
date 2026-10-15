@@ -1,9 +1,10 @@
-# The cloud box: Brodie with no laptop
+# The cloud box: Brodie worker and backend
 
-One container runs the backend API and the Brodie worker (`start.sh`), the database is Supabase Postgres, and the
-landing page stays on Vercel. Nothing on a laptop has to be running for a call to work. No Docker: Railway builds the
-repo with Nixpacks from `nixpacks.toml` and `railway.json` at the repo root; a plain Linux VM runs the same script
-under systemd (last section).
+One container runs the backend API and the Brodie worker (`start.sh`), the database is PostgreSQL, and the
+landing page stays on Vercel. Browser calls need no laptop process; FaceTime calls also require the official Chert CLI
+running on an authorized Mac or Linux host for the agreed test duration. Native Windows is unsupported. No Docker: Railway builds the
+repo with Railpack from `railpack.json`; `railway.json` records the deploy settings. `nixpacks.toml` remains the legacy recipe; a plain Linux VM runs the same script
+under systemd (last section). The temporary October 14 deployment uses Railway Postgres; the Supabase instructions below are an alternative.
 
 ```
 caller (FaceTime via Chert, or /join in a browser) ─► LiveKit Cloud ─► worker ──► API (same box) ─► Supabase Postgres
@@ -40,8 +41,7 @@ Supabase gives you one more thing worth keeping: the dashboard **Table editor** 
    ```
    Supabase > **Storage** > new **private** bucket `library` > upload the zip > `...` > **Get URL** > signed, expiry one year.
    That URL is `DANCE_LIBRARY_URL`. (Any private URL works; never a public one.)
-3. **Railway.** New project > **Deploy from GitHub repo** > this repo, branch `main`. It finds `railway.json` and builds
-   with `nixpacks.toml` (about five minutes the first time: CPU torch, mediapipe, the pose models). Then:
+3. **Railway.** New project > **Deploy from GitHub repo** > this repo, branch `main`. It builds with `railpack.json` (about five minutes the first time: CPU torch, mediapipe, the pose models). Then:
    - **Variables**: paste everything in the table above (the `.env.local` lines plus `DATABASE_URL`, `DANCE_LIBRARY_URL`,
      `DANCE_CALL_HANDLE`, `JOIN_KEY`).
    - **Settings > Networking > Generate domain** (port 8787 or whatever `PORT` Railway shows). `start.sh` turns that domain
@@ -50,17 +50,35 @@ Supabase gives you one more thing worth keeping: the dashboard **Table editor** 
 4. **Check.** `https://<domain>/health` → `{"ok": true, "db": "postgres", "db_ok": true}`. `https://<domain>/join?prefix=demo-desk`
    opens the browser caller with a fresh room that the cloud worker answers (this is the link to put on the site).
    `https://<domain>/dance` is the live board.
-5. **The Chert line.** Unchanged: during a booked slot someone runs `chert dev --agent <AGENT_NAME>` (any machine, a few
-   seconds to start; it has to stay up for the slot). The worker it dispatches to is now the cloud one.
+5. **The Chert line.** Verify the authenticated Chert project and its assigned line with `chert whoami` and `chert doctor`
+   (without `--agent`). On an authorized Mac or Linux host, run `chert dev --agent <AGENT_NAME> --env-file <protected-env-file>`
+   only for the agreed test duration. It must use the Railway worker's LiveKit project and dispatch name, and remain running
+   throughout testing. Ctrl+C releases the line. Railway does not start this connection. Do not use a shared line without
+   assignment confirmation; a real FaceTime call needs the test operator's go-ahead.
 
-Every `git push origin main` redeploys (the `watchPatterns` in `railway.json` skip doc-only pushes). Rollback: Railway >
-Deployments > an earlier one > **Redeploy**. Logs: Railway > the service > **Logs** (`[cloud]`, `[backend]`, `[dance]`,
-`[worker]` prefixes). The database is untouched by deploys.
+The temporary service's GitHub source is this repository, with `main` intended as its deployment branch.
+Native autodeploy is currently blocked by the missing Railway GitHub App installation. The repository owner must
+install/authorize the app for this repo; then enable autodeploy in the Railway service's source settings and verify
+that a push to `main` produces a successful deployment. The root build config has no watch-path filter, so all
+commits on the connected branch can deploy. A source connection alone does not prove automatic deployment is enabled.
+See [Railway GitHub autodeploy requirements](https://docs.railway.com/deployments/github-autodeploys).
+
+The proven compatibility fixes are versioned so GitHub builds use the same runtime recipe as the working CLI upload.
+Until autodeploy is enabled, deploy manually with `railway up --service brodie` from the linked checkout.
+Rollback: Railway > Deployments > an earlier one > **Redeploy**. Logs: Railway > the service > **Logs**.
+Deployments preserve the Postgres volume. To stop this temporary setup, disable any active deployment trigger first,
+then stop the `brodie` and `Postgres` Railway deployments and gracefully stop the operator-Mac Chert connector.
+
+For new services, confirm the platform settings explicitly: start `bash team/cloud/start.sh`, health path `/health`, timeout
+600 seconds, restart `ALWAYS`, sleeping disabled. The October 14 temporary deployment required these settings on the service
+because its legacy Nixpacks config did not supply a start command to Railpack. See [Railway build configuration](https://docs.railway.com/builds/build-configuration).
 
 ## How it stays up on its own
 
 - Railway restarts the container when it exits (`restartPolicyType: ALWAYS`) and only switches traffic to a new deploy
-  once `/health` answers.
+  once `/health` returns HTTP 200. A failed database probe returns HTTP 503 and `ok: false`. This checks the API/database,
+  not LiveKit registration, the dance library, Gemini, or either direction of audio/video. Railway's health check gates
+  deployment; it is not continuous media monitoring.
 - Inside the container `start.sh` runs the API and the worker in separate restart loops, so a worker crash never takes
   the board pages down and vice versa; a process that keeps dying within 30 s backs off up to a minute between tries.
 - The worker is a LiveKit Agents worker: it reconnects to LiveKit Cloud by itself, and every call runs inside the session's
@@ -69,6 +87,7 @@ Deployments > an earlier one > **Redeploy**. Logs: Railway > the service > **Log
   statements, so the Supabase transaction pooler is fine. The API refuses to start on SQLite in the cloud
   (`REQUIRE_DATABASE_URL=1`), so a misconfigured box fails loudly instead of losing codes.
 - Pose models are fetched at build and re-checked at boot; the key library is re-fetched at boot. Both are idempotent.
+- Uvicorn access logging is disabled because `/join` and `/phone.html` query strings contain a join key or room token.
 
 ## Sizing and cost
 
@@ -83,18 +102,18 @@ before paying for more CPU.
 | File | Role |
 |---|---|
 | `start.sh` | the process: env defaults, model and library fetch, the two restart loops |
-| `requirements.txt` | the box's Python deps (CPU torch comes from `nixpacks.toml`) |
+| `requirements.txt` | the box's Python deps (CPU torch comes from `railpack.json`) |
 | `fetch_models.py` | MediaPipe pose models into `models/` (build and boot) |
 | `fetch_library.py`, `pack_library.py` | the private key zip: fetched at boot from `DANCE_LIBRARY_URL`, packed on the laptop |
 | `../backend/dbcheck.py`, `../backend/import_sqlite.py` | prove `DATABASE_URL` works; carry the old SQLite rows over |
-| `/nixpacks.toml`, `/railway.json`, `/.python-version` | the Railway build and deploy config (repo root) |
+| `/railpack.json`, `/railway.json`, `/.python-version` | the Railway build and deploy config (repo root) |
 
 ## A VM instead of Railway
 
 Any Ubuntu 24.04 box with 2 vCPU and 4 GB (Hetzner CX22, Lightsail, Droplet) runs the same script:
 
 ```
-sudo apt install -y git python3.12-venv libgl1 libglib2.0-0 && curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo apt install -y git python3.12-venv libgl1 libegl1 libgles2 libglib2.0-0 && curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/imperorrp/ivyhacks-brodiegroove.git brodie && cd brodie
 uv venv --python 3.12 .venv && . .venv/bin/activate
 pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install -r team/cloud/requirements.txt
@@ -121,7 +140,7 @@ browser caller needs https for the camera). Update: `git pull && sudo systemctl 
 
 | Symptom | Cause, fix |
 |---|---|
-| build fails on `libGL.so.1` | the apt packages in `nixpacks.toml` did not apply; check Railway uses the NIXPACKS builder (`railway.json`) |
+| MediaPipe fails on `libGL.so.1`, `libEGL.so.1`, or `libGLESv2.so.2` | check the `deploy.aptPackages` in `railpack.json` and that Railway uses Railpack; worker registration alone does not load the pose model |
 | `[backend] DATABASE_URL is not set` | the variable is missing on the service, or `TEAM_DB` is set there (remove it) |
 | `db_ok: false` on `/health` | wrong password or host in `DATABASE_URL`; use the pooler URI, not the direct one (direct is IPv6-only on the free tier) |
 | `no library phrases for style` in the worker log | `DANCE_LIBRARY_URL` unset or the signed URL expired; the log line `[library] ... keys added` tells you |

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # The cloud box: the backend API (uvicorn on $PORT, public) and the Brodie worker (LiveKit Agents, outbound only) in one
 # container, each under its own restart loop. Railway runs this as the start command (railway.json); a plain VM runs it
-# under systemd (team/cloud/README.md). Nothing here needs a laptop.
+# under systemd (team/cloud/README.md). FaceTime also needs a separate authorized Mac/Linux Chert CLI process.
 #
 # Env it expects: DATABASE_URL (Supabase), LIVEKIT_URL/API_KEY/API_SECRET, GEMINI_API_KEY (+ GEMINI_BASE_URL for the relay),
 # AGENT_NAME (the dispatch name; the API mints /join tokens for the same name). Optional: DANCE_LIBRARY_URL (the AIST keys),
 # DANCE_PUBLIC_URL (defaults to the Railway domain), DANCE_CALL_HANDLE, JOIN_KEY, WORKER=0 (API only), DANCE_* tuning.
 set -u
 cd "$(dirname "$0")/../.."
-[ -f /opt/venv/bin/activate ] && . /opt/venv/bin/activate        # nixpacks puts the Python env here; a VM activates its own
+[ -f /opt/venv/bin/activate ] && . /opt/venv/bin/activate        # legacy Nixpacks path; Railpack supplies /app/.venv/bin in PATH
 export PYTHONUNBUFFERED=1 PYTHONUTF8=1
 export PORT="${PORT:-8787}"
 export BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:$PORT}"        # the worker talks to the API next to it
@@ -33,7 +33,8 @@ loop() {   # loop NAME CMD...: run CMD forever; the pause between restarts doubl
   done
 }
 
-loop api python -m uvicorn app:app --app-dir team/backend --host 0.0.0.0 --port "$PORT" &
+# /join and /phone.html query strings contain credentials; keep them out of access logs.
+loop api python -m uvicorn app:app --app-dir team/backend --host 0.0.0.0 --port "$PORT" --no-access-log &
 API_PID=$!
 WORKER_PID=
 if [ "${WORKER:-1}" != "0" ]; then

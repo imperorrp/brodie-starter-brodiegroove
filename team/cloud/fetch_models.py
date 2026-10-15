@@ -1,5 +1,5 @@
 """Download the MediaPipe pose landmarker models into models/ when they are missing (git-ignored; Apache 2.0; Google's public
-bucket). The build runs this (nixpacks.toml) and start.sh runs it again, so a box that lost its disk heals itself.
+bucket). The build runs this (railpack.json) and start.sh runs it again, so a box that lost its disk heals itself.
 
     python team/cloud/fetch_models.py [full lite heavy]      default: full lite (DANCE_POSE picks one; the worker defaults to full)
 """

@@ -9,20 +9,23 @@ The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every eng
 
 ## 0. Now (before Monday's launch post)
 
+- [x] Version the proven Railway compatibility fixes so GitHub builds retain the working runtime.
+- [!] Enable `main`-push autodeploy after the repository owner authorizes the Railway GitHub App; write access is confirmed, but Railway reports `NO_INSTALLATION`.
+
+- [x] Temporary deployment preparation (2026-10-14): separate checkout, official Mac CLI on Node 22, Railway service/domain; DB-dependent HTTP status, secret-safe access logging, and a Railpack translation of the legacy Nixpacks build.
+- [x] Temporary Railway deployment: supplied credentials, PostgreSQL roundtrip, HTTPS health, keyed join dispatch and browser rendering, LiveKit registration/doctor dispatch, Gemini Live setup, and assigned Chert project confirmed.
+- [x] Verify full/lite pose loading and blank-frame inference remotely after adding missing EGL/GLES native libraries.
+- [!] Private AIST library unavailable: generated routines and daily challenges require the team to obtain/rebuild the keys.
+- [ ] Supervised media test when requested: caller audio, agent audio, caller video, agent video, and cleanup separately. The user authorized continuous Chert connector operation; the operator login service is running, with clean no-call stop/release/restart verified.
+
 - [x] Submission issue opened on `seraphimlabs-dev/brodie-starter` (2026-10-11).
 - [x] Sunday LinkedIn post tagging Brodie and Chert (the entry ticket) (2026-10-11).
 - [x] Public repo `imperorrp/ivyhacks-brodiegroove` up to date; it is the only repo from now on (2026-10-11 22:16 ET).
-- [~] **Put Brodie in the cloud so no laptop has to stay on** (`team/cloud/README.md`). Code is in (2026-10-11 23:15 ET);
-      the Postgres engine passed dbcheck, `test_backend`, the ghost/expiry checks and `import_sqlite` (twice) on a local
-      Postgres 17 (2026-10-12); SQLite stays the default, so unsetting `DATABASE_URL` rolls back. Left to do, in order: (1) Supabase project → `DATABASE_URL` → `python team/backend/dbcheck.py` green; (2)
-      `python team/cloud/pack_library.py` → private bucket → `DANCE_LIBRARY_URL`; (3) Railway service from this repo with
-      the env pasted in → `/health` says `postgres`; (4) `/join?prefix=demo-desk` from a phone gets a scored phrase; (5) put
-      the `/join` link on the landing page and set `JOIN_KEY`; (6) the Chert slot dispatches to the cloud worker. Remove the
-      "not deployed" line from `CODEBASE.md` §13 when (3) is green.
+- [x] **Put the worker/backend in the cloud; prepare the operator-Mac Chert connector** (`team/cloud/README.md`). Temporary Railway Postgres is provisioned; the API and LiveKit agent are deployed. `JOIN_KEY` and the confirmed call handle are configured. The existing Vercel site remains unchanged. Generated-routine and supervised-call work remains above.
 - [ ] **Log every post** at getbrodie.com/ivyhacks (resubmit with the same team name each time).
 - [ ] **Retire `team/docs/demo-and-posting.md`**; its checklist is stale and its plan is "_tbd_". `team/promo/STRATEGY.md`
       is the plan now; keep one source.
-- [ ] **Set `DANCE_CALL_HANDLE`** in `.env.local` and on Railway to the line's FaceTime address and document it in
+- [~] **Set `DANCE_CALL_HANDLE`** (temporary Railway service configured; team laptop still separate) in `.env.local` and on Railway to the line's FaceTime address and document it in
       `.env.example` (keep the value out of git). It is the result page's Call Brodie button and, with no public URL, the QR.
       Zero code.
 - [ ] **Book Chert slots for the week** and put the times on the site; set `call_line` / `call_url` in

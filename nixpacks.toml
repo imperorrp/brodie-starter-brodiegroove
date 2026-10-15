@@ -1,4 +1,4 @@
-# Railway build (builder NIXPACKS, see railway.json) for the cloud box: the worker + backend API from team/cloud/start.sh.
+# Legacy Nixpacks build (current Railway uses railpack.json) for the cloud box: the worker + backend API from team/cloud/start.sh.
 # The root requirements.txt is the laptop set (torch with CUDA on Linux, research extras); the box installs CPU torch and
 # team/cloud/requirements.txt instead. libgl1/libglib2.0-0: opencv-contrib-python (a mediapipe dependency) needs them.
 providers = ["python"]

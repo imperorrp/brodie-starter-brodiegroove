@@ -1,10 +1,10 @@
 # The cloud box (team/cloud/start.sh: the worker and the backend API in one container). Linux x86_64, CPU only.
-# nixpacks.toml installs a CPU-only torch first (facetime/pipeline.py imports the starter's classifier at module level even with
+# railpack.json installs a CPU-only torch first (facetime/pipeline.py imports the starter's classifier at module level even with
 # perception off; the CUDA wheels would add 2 GB for nothing), then this file. Keep in step with the root requirements.txt.
 numpy>=2.0
 scipy
 opencv-python-headless>=4.10
-mediapipe>=0.10.21          # pulls opencv-contrib-python, which needs libgl1 + libglib2.0-0 (nixpacks.toml aptPkgs)
+mediapipe>=0.10.21          # pulls opencv-contrib-python, which needs libgl1 + libglib2.0-0 (railpack.json deploy.aptPackages)
 av
 google-genai>=1.0
 livekit>=1.0

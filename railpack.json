@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "python",
+  "packages": { "python": "3.12" },
+  "steps": {
+    "install": {
+      "commands": [
+        "python -m venv /app/.venv",
+        "COPY:team/cloud/requirements.txt team/cloud/requirements.txt",
+        "/app/.venv/bin/pip install --upgrade pip",
+        "/app/.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu",
+        "/app/.venv/bin/pip install -r team/cloud/requirements.txt"
+      ]
+    },
+    "build": {
+      "commands": ["...", "/app/.venv/bin/python team/cloud/fetch_models.py"]
+    }
+  },
+  "deploy": {
+    "startCommand": "bash team/cloud/start.sh",
+    "aptPackages": ["libgl1", "libegl1", "libgles2", "libglib2.0-0"],
+    "paths": ["/app/.venv/bin"]
+  }
+}

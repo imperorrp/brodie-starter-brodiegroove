@@ -4,7 +4,11 @@ What exists, how far each piece has been verified, and what has shipped. Update 
 something changes state; the dated narrative belongs in `../PROGRESS.md` (private), the ranked work in `TODO.md`, the
 file map in `CODEBASE.md`.
 
-**As of 2026-10-15, about 01:45 ET.** Tuesday's features are built: Brodie's face has moods (kit art only), and the scorecard
+**As of 2026-10-15 (temporary Railway deployment).** The backend and LiveKit agent are deployed with Railway Postgres; the portrait-phone update (`8e4f724`) is live. HTTPS/database health, protected browser join dispatch, database write/read/delete, full/lite pose-model inference, Gemini relay session setup, and LiveKit registration/Chert waiting-room membership passed. The user reports FaceTime now works; individual audio/video directions have not been independently accepted here. The operator-Mac Chert connector runs continuously under a login service; graceful no-call release/restart was verified. Vercel remains unchanged.
+
+The deployment fixes are now versioned: Railpack/CPU dependencies with EGL/GLES, database-dependent HTTP health, and access-log suppression for join credentials. GitHub write access is confirmed, but native autodeploy remains blocked by the missing Railway GitHub App installation. The repository owner must authorize that app, then enable the `main` trigger. The private AIST library is still unavailable (four tracked reference keys, zero AIST phrases); generated routines and daily challenges remain blocked.
+
+Upstream team status, 2026-10-15 about 01:45 ET (its cloud deployment statement predates the temporary operator deployment above): Tuesday's features are built: Brodie's face has moods (kit art only), and the scorecard
 QR opens a result page `/r/<code>` that unfurls as a preview card when pasted (it needs the deployed backend to be reachable). The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
 the submission is in. The cloud box (Supabase + Railway, `team/cloud/`) is written and its Postgres engine verified against a
 local Postgres 17, but not yet deployed. On 2026-10-12 two bugs that broke every real call since build-day evening were fixed:
@@ -22,7 +26,7 @@ the most social traction, so everything from here is "one feature, one post, eac
 | Sunday LinkedIn post tagging Brodie and Chert (the entry ticket) | **done** |
 | Post log at getbrodie.com/ivyhacks | not confirmed; log every post of the week there |
 | Landing page | live at https://brodiegroove.vercel.app/ (Vercel, static from `team/web/groove`); gh-pages is the fallback |
-| Cloud box: worker + API on Railway, Postgres on Supabase (`team/cloud/README.md`) | **code ready, Postgres engine verified locally, not deployed.** `db.py` runs on Postgres when `DATABASE_URL` is set (SQLite otherwise, unchanged; unset the variable to roll back), and on 2026-10-12 passed `dbcheck.py`, all 7 `test_backend` cases, the ghost / forget-me / 30-day-expiry checks and a double `import_sqlite.py` of `team.db` against a local Postgres 17 (not yet Supabase's pooler); `app.py` gained `/join` and a DB-aware `/health`, `start.sh` runs both processes under restart loops, `nixpacks.toml` + `railway.json` build it without Docker. Needs: a Supabase project (`DATABASE_URL`), the AIST key zip on a private URL (`DANCE_LIBRARY_URL`), a Railway service with the env pasted in. First green build pending |
+| Cloud box: worker + API on Railway, temporary Railway Postgres (`team/cloud/README.md`) | **deployed 2026-10-14.** HTTPS health, DB roundtrip and LiveKit dispatch passed; full/lite pose load and blank-frame inference passed. AIST library unavailable. Chert connector running continuously under the operator login service; no media acceptance. |
 | Waitlist | Google Form wired to every Call button (`WAITLIST_URL` in `groove/index.html`) |
 | Promo kit | built (`team/promo`), `config.json` has `call_line` and `call_url` empty, so every CTA still says "THE LINE OPENS MON 10.12" |
 | Pitch video / film | pipelines built; outputs live under `data/tmp/pitch/` and `data/tmp/film/` on this laptop only |
@@ -100,7 +104,7 @@ Counts at the last pass: 168 pytest cases (110 functions, 10 files), 46 eval sce
 | Eval | `data/tmp/eval_report.json`, `data/tmp/cue_review.csv`, `data/tmp/eval/<scenario>.{json,mp4,log}` |
 | HUD snapshots | `data/tmp/hud/*.png` |
 | Promo, pitch, film | `data/tmp/promo/`, `data/tmp/pitch/`, `data/tmp/film/` |
-| Backend DB | `team/backend/team.db` (eval uses `data/tmp/eval/eval_team.db`); deployed: Supabase Postgres (`DATABASE_URL`), browsable in the Supabase table editor |
+| Backend DB | `team/backend/team.db` (eval uses `data/tmp/eval/eval_team.db`); temporary deployment: Railway Postgres (`DATABASE_URL`) |
 | Chert | `~/.chert/dev/<binding>/` journal; `data/tmp/chert_dev.log` |
 
 ## 5. How to check the state quickly

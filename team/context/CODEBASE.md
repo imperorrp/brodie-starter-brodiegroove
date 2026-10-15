@@ -27,7 +27,7 @@ switched off, loading our `team/dance/live.py` as its handlers file. That file r
 caller is bound, runs MediaPipe pose in a thread, drives the scoring engine, renders a video track, and talks to Gemini Live
 through the worker's voice layer. A small FastAPI backend holds codes, boards, profiles and classes in Postgres (Supabase)
 when deployed and in SQLite for tests and the simulator. Deployed, the worker and the backend run in one container on Railway
-(`team/cloud/`, no laptop involved). Everything else in `team/` is tooling: run scripts, a Chrome stand-in for the phone, the
+(`team/cloud/`; FaceTime still needs a separate official Chert CLI process on Mac/Linux). Everything else in `team/` is tooling: run scripts, a Chrome stand-in for the phone, the
 landing page, promo and pitch-video generators.
 
 ```
@@ -58,7 +58,7 @@ ivyhacks-brodie/
 ├── README.md                 public pitch, run instructions, credits
 ├── requirements.txt          starter deps + pillow, segno (ours)
 ├── vercel.json               static hosting of team/web/groove (the landing page)
-├── railway.json nixpacks.toml .python-version   the cloud box build and deploy (Railway, Nixpacks; section 6.1)
+├── railway.json railpack.json .python-version   the cloud box build and deploy (Railway, Railpack; section 6.1); nixpacks.toml is legacy
 ├── .env.example              LIVEKIT_URL/API_KEY/API_SECRET, AGENT_NAME, GEMINI_API_KEY, GEMINI_BASE_URL; cloud: DATABASE_URL, DANCE_LIBRARY_URL, JOIN_KEY ...
 ├── CLAUDE.md                 working rules: read team/context first, keep it current, push to origin only
 ├── team/                     ── ours ──
@@ -423,9 +423,9 @@ name hashed), `close`. The summary is POSTed to `/events` by `live.py`.
 mirror convention, cue names the caller's own side), `test_modules` (16: progression, choreo, feedback, gestures, telemetry,
 tracker, text/fx), `test_modules2` (10: cues, style vocab, ghost, addressed, answers, noise cancellation, pacing, guards,
 screens; the `RoomOptions` swap survives `_ensure_options`), `test_orient` (5), `test_tracker` (5: crossings, re-ID, walk-ins, children, crowd), `test_phase1` (9: codes vs
-count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (8: FastAPI
+count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (9: FastAPI
 `TestClient` on a temp DB: codes/duels, chains, classes, profiles, boards/funnel, forget me, metrics, the `/r/{code}` page with
-its preview tags and 1200×630 card), `test_live` (45 functions, 103 cases: kit compliance of every mood frame, moods from
+its preview tags and 1200×630 card, database-dependent HTTP health status), `test_live` (45 functions, 103 cases: kit compliance of every mood frame, moods from
 verdicts / scores / coach style, the QR opening the result page, `classify` phrasings, flow, speaker queue, offers, space/ready waits, tools guarded, buttons, portrait
 canvas, cards, kit compliance, photo card + QR, modes, pose step, depth cues, layered cues, the lite-model swap closing the old
 landmarker on the pose thread).
@@ -452,7 +452,7 @@ refuses to start on SQLite when a cloud marker is in the env (`REQUIRE_DATABASE_
 
 | Group | Routes |
 |---|---|
-| Health, events | `GET /health` → `{ok, db: postgres|sqlite, db_ok}`; `POST /events`; `GET /events/recent`; `GET /metrics` (session summaries + funnel); `GET /sessions/last` (legacy) |
+| Health, events | `GET /health` → `{ok, db: postgres|sqlite, db_ok}`, HTTP 200 when DB answers or 503 otherwise; `POST /events`; `GET /events/recent`; `GET /metrics` (session summaries + funnel); `GET /sessions/last` (legacy) |
 | Browser caller | `GET /join?prefix=demo-desk&facing=user&k=` mints a one-hour token for a fresh room (dispatch to `AGENT_NAME`, same default as the worker) and redirects to `GET /phone.html` (serves `team/web/phone.html`). `JOIN_KEY` set → `k` required. Needs `LIVEKIT_*` on the backend. The no-laptop way to call Brodie from a browser |
 | Results, codes | `POST /dance/result` → `{code, score100, ghost_token?, versus?, winner?, board?}`; `GET /dance/result/{code}`; `GET /dance/code/{code}` (what kind a spoken code is); `GET /dance/leaderboard?key&mode&since&limit`; `GET /dance/history?name`; `GET /dance/daily_played?name&key`; `GET /dance?key=` (HTML board) |
 | Profiles | `GET /dance/profile/{name}`; `POST .../award`; `POST .../prefs`; `DELETE /dance/profile/{name}` ("forget me": profile, results, ghosts, codes; chains/classes anonymised) |
@@ -528,24 +528,27 @@ and `dance_loop.ps1` use this; with `DATABASE_URL` set the in-process copy also 
 | `publish_site.ps1` / `.sh` | Force-push the landing page to `gh-pages` (Vercel is the live host; `.ps1` points at a folder that no longer exists, see section 13) |
 | `worker.ps1` / `.sh` | Legacy: the starter worker with `team/skill/` (not the dance path) |
 
-### 6.1 `team/cloud/` — the cloud box (no laptop)
+### 6.1 `team/cloud/` — the cloud box (separate Chert connector for FaceTime)
 
-One container runs the backend API and the worker; the database is Supabase Postgres; Railway builds the repo with Nixpacks
-(`/railway.json` → builder NIXPACKS, start `bash team/cloud/start.sh`, restart ALWAYS, health `/health`; `/nixpacks.toml` →
-Python 3.12, apt `libgl1 libglib2.0-0` for mediapipe's opencv, CPU-only torch from the PyTorch index, then
+The temporary service has this repository connected as source, but native autodeploy still requires the Railway GitHub App installation. Once enabled on `main`, there is no watch-path filter.
+
+One container runs the backend API and the worker; the database is PostgreSQL (Railway Postgres for the temporary deployment); Railway builds the repo with Railpack
+(`/railway.json` → builder RAILPACK, start `bash team/cloud/start.sh`, restart ALWAYS, health `/health`; `/railpack.json` →
+Python 3.12, apt `libgl1 libegl1 libgles2 libglib2.0-0` for MediaPipe/OpenCV, CPU-only torch from the PyTorch index, then
 `team/cloud/requirements.txt`, then the pose-model download; `/.python-version` = 3.12). The runbook with the keys, the
 Supabase and Railway steps, costs and troubleshooting is `team/cloud/README.md`.
 
 | File | Does |
 |---|---|
-| `start.sh` (45) | env defaults (`PORT`, `BACKEND_URL=http://127.0.0.1:$PORT`, `REQUIRE_DATABASE_URL=1`, `DANCE_PUBLIC_URL` from `RAILWAY_PUBLIC_DOMAIN`, solo pose defaults), `fetch_models.py`, `fetch_library.py`, then uvicorn and `run_worker ... start` each in a restart loop with backoff (2 s doubling to 60 s while a process keeps dying inside 30 s). `WORKER=0` runs the API alone |
+| `start.sh` (45) | env defaults (`PORT`, `BACKEND_URL=http://127.0.0.1:$PORT`, `REQUIRE_DATABASE_URL=1`, `DANCE_PUBLIC_URL` from `RAILWAY_PUBLIC_DOMAIN`, solo pose defaults), `fetch_models.py`, `fetch_library.py`, then uvicorn (access logs disabled to keep join credentials out of logs) and `run_worker ... start` each in a restart loop with backoff (2 s doubling to 60 s while a process keeps dying inside 30 s). `WORKER=0` runs the API alone |
 | `requirements.txt` | the box's deps: numpy, scipy, opencv-headless, mediapipe, av, google-genai, livekit + agents + google + noise-cancellation plugins, pillow, segno, fastapi, uvicorn, psycopg |
 | `fetch_models.py` (28) | `models/pose_landmarker_{full,lite}.task` from Google's bucket when missing (build and boot) |
 | `fetch_library.py` (43) | the git-ignored keys (`aist_*`, `class_*`) from `DANCE_LIBRARY_URL` (a zip; a private Supabase Storage signed URL) into `team/dance/library/`, skipping files present; without the URL it only reports how many AIST keys exist |
 | `pack_library.py` (26) | the laptop side: zips those keys to `data/tmp/library.zip` for upload |
 
 A VM runs the same `start.sh` under systemd (README, last section). The Chert line is unchanged: `chert dev --agent` still
-runs on any machine during a slot and dispatches to the cloud worker by `AGENT_NAME`.
+runs on an authorized Mac/Linux host for the agreed test duration and dispatches to the cloud worker by `AGENT_NAME`.
+It must use the same LiveKit project; Ctrl+C releases the assigned line. Native Windows is unsupported.
 
 ---
 
@@ -742,11 +745,10 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 - `promo/clips.py` Day 4 expects `data/tmp/promo/vo/{hype,chill,coach}.wav`; no script in the tree writes them.
 - `scipy` is imported by `music.py`, `film/audio.py`, `film/score.py`, `tracker.py` (optional); it is in `team/cloud/requirements.txt`
   but still not in the root `requirements.txt`.
-- The cloud box (`team/cloud/`) has not been deployed yet: `nixpacks.toml`, `railway.json` and `start.sh` are written from the
-  Nixpacks and Railway docs, not from a green build. The first deploy may need a tweak; remove this line once `/health` answers
-  from Railway. The Postgres engine itself is verified against a local Postgres 17 (2026-10-12: `dbcheck.py`, the 7
-  `test_backend` cases, the ghost-token / forget-me / 30-day-expiry checks, `import_sqlite.py` run twice on a copy of `team.db`);
-  Supabase's transaction pooler is not yet tried.
+- The temporary cloud box is deployed with Railway Postgres (2026-10-14): HTTPS health, keyed join redirect,
+  database write/read/delete, and LiveKit agent dispatch passed. The private AIST library is unavailable, so generated
+  routines and daily challenges remain blocked. The official operator-Mac Chert connector runs continuously under a login service, with clean no-call release/restart verified; no FaceTime media acceptance has occurred. The current builder needs `railpack.json` and explicit service
+  start/health/restart settings; `nixpacks.toml` is retained only as the legacy recipe.
 - `chrome_test.py` reads `--worker-log` as UTF-8; a log written by Windows PowerShell's `*>` redirect is UTF-16 and shows "(none)".
   `chrome.ps1`'s worker logs only to its own window, so the default `worker_dance5.log` is usually stale.
 - `livekit-local-inference` is stubbed in this `.venv` (its native module crashed on load), so `live.vad_listener` dies at the

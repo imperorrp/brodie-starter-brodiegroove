@@ -52,7 +52,8 @@ _startup()
 
 @app.get('/health')
 def health():
-    return {'ok': True, 'db': db.engine(), 'db_ok': db.ping()}
+    db_ok = db.ping()
+    return JSONResponse({'ok': db_ok, 'db': db.engine(), 'db_ok': db_ok}, status_code=200 if db_ok else 503)
 
 
 # ---- the browser caller, minted here so no laptop is needed: GET /join opens phone.html with a fresh room token ----

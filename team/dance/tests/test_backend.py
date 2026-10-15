@@ -127,3 +127,15 @@ def test_metrics(client):
         client.post('/events', json=dict(type='session_summary', t_wall=1.0, completed=done, tracking_rate=0.95, median_cue_latency_ms=400.0, tool_calls=4, tool_errors=1))
     m = client.get('/metrics').json()
     assert m['sessions'] >= 2 and m['median_tracking_rate'] == 0.95 and m['tool_error_rate'] == 0.25 and 'funnel' in m
+
+
+def test_health_status_tracks_database(client, monkeypatch):
+    import db
+    monkeypatch.setattr(db, 'ping', lambda: True)
+    response = client.get('/health')
+    assert response.status_code == 200
+    assert response.json() == dict(ok=True, db='sqlite', db_ok=True)
+    monkeypatch.setattr(db, 'ping', lambda: False)
+    response = client.get('/health')
+    assert response.status_code == 503
+    assert response.json() == dict(ok=False, db='sqlite', db_ok=False)
