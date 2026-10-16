@@ -122,6 +122,15 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
       Gemini turn can start a little before its audio; `avatar_state` treats that moment as thinking only on a real mixer).
 - [ ] **Optional sound while he thinks** (a soft tick): not done because any Brodie audio closes the echo guard, so the caller's
       next words would be dropped; it would need the guard to ignore that one clip.
+- [x] **Testers' list, 2026-10-15** (done 2026-10-16, unit + snapshots + 3 sim scenarios; none on a real call yet): slower dances
+      (level tempos 0.65 / 0.8 / 0.95, ladder 0.45-0.9), simpler beginner routines (new seeds take the simplest moves of the style;
+      old codes unchanged), Brodie told to speak slowly (persona PACE + every stage direction), the ghost drawn as a mannequin
+      (torso, joints, left/right shades, facing dot), the menu cards' small text removed, the scorecard QR 220 px with a log line
+      saying why a card has none.
+- [ ] **Hear whether Brodie is slower on a real call.** Gemini Live has no speech-rate setting; if the prompt is not enough,
+      try a calmer `GEMINI_VOICE` or a time-stretch in the mixer.
+- [ ] **QR on the deployed box**: after the redeploy, finish one learn session and check the worker log line
+      `[dance] scorecard: code ..., QR https://.../r/<code>`, then scan the FaceTime screenshot.
 
 - [ ] **True barge-in while Brodie talks**: the echo guard drops the caller's audio while Brodie speaks; sending silence
       instead of dropping frames is a starter change (`Floor.gate_input`).

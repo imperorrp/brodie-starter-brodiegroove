@@ -189,7 +189,10 @@ no phrases borrows the whole pool (so a yes never fails on "no library phrases")
 - `generate(style, level, n_phrases, seed, name)` → `gen_<style>_<level>_<seed>`, `daily(date)` → `gen_daily_<yyyymmdd>`,
   `load_any(name)` (dispatches `gen_*` to a rebuild, else `load_key`), `with_combined`, `with_half`, `with_counts`,
   `routine_seconds`, `phrase_complexity` (tertiles = beginner / intermediate / advanced), `STYLE_POOLS`, `DAILY_ROTATION`,
-  `STYLE_CODE`. Levels: 2 / 3 / 4 phrases at tempo 0.8 / 0.95 / 1.05.
+  `STYLE_CODE`. Levels: 2 / 3 / 4 phrases at tempo `LEVEL_TEMPO` 0.65 / 0.8 / 0.95 (2026-10-16; was 0.8 / 0.95 / 1.05: testers
+  found it too fast). `generate(..., simple=None)`: seeds from `SIMPLE_SEED` (10000; new random seeds are 10000-99999) give a
+  beginner the simplest moves of the style (n of the easiest max(2n, 4) phrases by complexity); older seeds, and dailies before
+  `SIMPLE_DAILY` (20261017), keep the old tertile pick so shared codes and today's board rebuild the same routine.
 
 **`ingest.py`** (104) + **`ingest_aist.py`** (65) — COCO-17 keypoint sequences (2D/3D; AIST++ pickles) → keys.
 `coco_to_mediapipe`, `key_from_coco_sequence`, `load_aist_keypoints`; the AIST batch CLI walks `data/aist/keypoints3d`,
@@ -214,7 +217,7 @@ The whole call. Module layout, in file order:
 |---|---|
 | 1–52 | docstring (worker command, env list, simulator usage), imports, `sys.path` setup |
 | 53–156 | transcript vocabulary: `NAME_RE`, `CMD_WORDS` (phrase → command), `AFFIRM_RE`/`DENY_RE`/`CANCEL_RE`/`HOLD_RE`/`QUESTION_RE`/`REQUEST_RE`/`REMATCH_RE`, `classify(text)` → `{request, rematch, affirm, deny, cancel, hold, question}`, `pain_level`, `style_from` |
-| 159–225 | tuning tables: setup caps, `WIN_TOTAL` (195/216/240 by difficulty), `MODES`, `PRIORITY`, `STYLE_*`, `PERSONA_PROMPTS` (hype/chill/coach), `RUNGS` (tempo ladder 0.5 → 0.6 → 0.75 → 0.9), `STATE_RULES` (the per-state note sent to Gemini), `LEVEL_CFG`, `CHOICES` |
+| 159–225 | tuning tables: setup caps, `WIN_TOTAL` (195/216/240 by difficulty), `MODES`, `PRIORITY`, `STYLE_*`, `PERSONA_PROMPTS` (hype/chill/coach), `RUNGS` (tempo ladder 0.45 → 0.55 → 0.65 → 0.8 → 0.9 since 2026-10-16; the daily shot is `RUNGS[3]`), `LEVEL_CFG` tempos from `choreo.LEVEL_TEMPO`, `STATE_RULES` (the per-state note sent to Gemini), `LEVEL_CFG`, `CHOICES` |
 | 228–297 | helpers: `parse_code` (digits or number words; strict outside the menu), `parse_commands`, `pick_command`, `key_title` |
 | 300–363 | `class Backend` — HTTP via `urllib` (3 s, in an executor, never raises) or, with `BACKEND_URL=fake|off`, `team/backend/db.py` loaded by path and every route mapped in-process |
 | 366–452 | Gemini turn shaping and the starter patches: `stage_direction(prompt)`, `tune_realtime()` (en-US transcription, high VAD sensitivity, context compression), `patch_voice_layer()` (applied at import when `in_worker()`, i.e. `facetime.voice`/`facetime.worker` are already loaded or `__main__` has `CONSUMERS`; the simulator and tests skip it and never import livekit.agents or torch; off with `DANCE_VOICE_PATCH=0`): `GeminiModel.build` wrapped, `GeminiModel.generate` replaced with `generate_reply(user_input=stage_direction(...))`, `GeminiModel.start` wrapped by `audio_in.wrap_start`, `Floor.gate_input` wrapped for the barge-in window and 600 ms of silence on a mid-word cut |
@@ -366,17 +369,21 @@ for a wide source; `to_canvas` crops only what the aspect forces; `safe_box` kee
   grade's mood (`mood_for_grade`: S/A pumped, B happy, C/D encourage), a pink SCREENSHOT THIS pill over the code plate, code
   tiles and QR; `_draw_classic_card` for squads/unscored), `visibility(lm)`, `framing_hint(parts)`, `mirror_view`.
 - Elements: `draw_figure` (caller in paper with a head ring, never covering the face), `draw_ghost` (cyan, hip-anchored at
-  torso scale, upper-only when legs are hidden; `ghost_placement`), `draw_panel` (the reference in a corner panel),
+  torso scale, upper-only when legs are hidden; `ghost_placement`; opacity x1.35 up to 0.9), `draw_mannequin` (the ghost, the
+  panel and the break preview since 2026-10-16: filled torso, tube limbs, the dancer's left side lighter and in front, joint
+  balls, solid hands/feet, a head with a nose dot for facing), `draw_panel` (the reference in a corner panel),
   `draw_badge` (Brodie's PiP tile, with `mood`), `draw_state_chip` (WATCH / WITH ME / YOUR TURN / SETUP / READY? ...), `draw_score_block`,
   `draw_battle` (HP bar), `draw_squad_strip`/`draw_squad_counts`, `draw_beat_dots` (count tiles), `draw_judgments`
   (PERFECT / NICE / MISS pops), combo edge glow, `draw_tip`, `draw_gesture_ring`, `draw_main` (5-6-7-8 count-in, reveals),
   `draw_pose_step`, `draw_reveal`/`draw_score_card`/`draw_squad_reveal`, `draw_recap`, `draw_overlays` (confetti, flash,
   K.O., level-up, achievements, MVP), `draw_chat` (speech bubble + hints), `draw_caption`, `draw_paused`, `draw_safety_card`,
-  `draw_mode_cards` (the six cards with a lit/picked halo), `draw_setup_view` (head circle, body box, BODY/DISTANCE/LIGHT
+  `draw_mode_cards` (the six cards with a lit/picked halo: icon, tag, title and badge only; the small description lines were
+  removed 2026-10-16, cards 150 px tall), `draw_setup_view` (head circle, body box, BODY/DISTANCE/LIGHT
   pills, arrows), `draw_break` (NEXT MOVE / BACK TO START ring with the next first pose), `draw_compare` (telephone
   before/you), `qr_payload`/`qr_matrix`/`draw_qr` (`segno`). `qr_payload(handle, code)`: with `DANCE_PUBLIC_URL` and a code,
   the result page `{base}/r/{code}` (backend, section 4: the score, a Call Brodie FaceTime button, preview-card tags); else
-  `facetime:<handle>`; else no QR.
+  `facetime:<handle>`; else no QR. The photo card's QR is 220 px (was 150: ~4 px a cell, too soft through FaceTime), and
+  `finish_session` logs `[dance] scorecard: code ..., QR ...` with the reason when there is none (telemetry row `scorecard`).
 - Env: `DANCE_PUBLIC_URL` (the backend's public address; the QR target), `DANCE_CALL_HANDLE`. Palette: volt `#D9FF3D`, pink `#FF3DA8`, cyan `#3DE0FF`, amber
   `#FFB13D`, red `#FF4D5E`, ink `#0A0A0B`, paper `#F4F4F0`.
 - A legacy layer (`draw_topbar`, `draw_timeline`, `draw_chips`, `draw_history`, `draw_combo`, `draw_menu`,

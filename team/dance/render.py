@@ -250,7 +250,63 @@ def draw_ghost(img, skel_norm, anchor, torso_px, color=None, alpha=0.6, thicknes
     if skel_norm is None: return img
     pts = anchor + np.asarray(skel_norm, np.float32) * torso_px
     w = int(np.clip(0.075 * torso_px, 4, 26))
-    return draw_figure(img, pts, None, color=color or CYAN, width=w, glow=0.9, alpha=alpha, edges=UPPER_EDGES if upper_only else None)
+    return draw_mannequin(img, pts, color=color or CYAN, width=w, alpha=min(0.9, alpha * 1.35), edges=UPPER_EDGES if upper_only else None)
+
+
+GHOST_LEFT = {11, 13, 15, 23, 25, 27}            # the dancer's own left side (MediaPipe's left landmarks)
+GHOST_JOINTS = (11, 12, 13, 14, 23, 24, 25, 26)  # shoulders, elbows, hips, knees get joint balls; wrists and ankles get hands/feet
+
+
+def draw_mannequin(img, pts, color=CYAN, width=8, alpha=0.85, glow=0.6, edges=None):
+    """The ghost as a mannequin you can read at a glance (testers 2026-10-15: "show which body part the skeleton is"): a filled
+    torso, round tube limbs (dark edge, colour, a light stripe), the dancer's left side a shade lighter than the right and drawn in
+    front of it, joint balls at shoulders, elbows, hips and knees, solid hands and feet, and a head with a nose dot that shows which
+    way it faces. pts: 33 landmarks in pixels."""
+    if pts is None: return img
+    P = np.asarray(pts, np.float32)[:, :2]; color = tuple(int(v) for v in (color or CYAN))
+    segs = [e for e in (edges or BODY_EDGES) if e != (11, 12) and e != (23, 24) and e not in ((11, 23), (12, 24))]
+    used = sorted({j for e in (edges or BODY_EDGES) for j in e} | {0, 7, 8})
+    w = max(3, int(width)); sw = float(np.linalg.norm(P[11] - P[12])) + 1e-3
+    head_c = 0.5 * (P[7] + P[8]); hr = max(w * 1.4, 0.55 * float(np.linalg.norm(P[7] - P[8])), 0.24 * sw)
+    x0, y0, x1, y1 = _roi_box(np.concatenate([P[used], head_c[None]]), w * 3 + int(hr) + 12, (img.shape[1], img.shape[0]))
+    if x1 - x0 < 4 or y1 - y0 < 4: return img
+    roi = img[y0:y1, x0:x1]; off = np.array([x0, y0], np.float32)
+    ip = lambda p: tuple(int(v) for v in np.round(p - off))
+    light, deep, edge = _mix(PAPER, color, 0.45), _mix(color, INK, 0.72), _mix(color, INK, 0.25)
+    if glow > 0:                                                             # the site's soft cyan glow, as before
+        layer = np.zeros_like(roi)
+        for a, b in segs: cv2.line(layer, ip(P[a]), ip(P[b]), color, w + 4, cv2.LINE_AA)
+        k = int(max(5, w * 2.2)) | 1
+        cv2.addWeighted(roi, 1.0, cv2.GaussianBlur(layer, (k, k), 0), glow * alpha, 0, dst=roi)
+    over = roi.copy()
+
+    def limb(a, b, col):
+        pa, pb = ip(P[a]), ip(P[b])
+        cv2.line(over, pa, pb, edge, w + 4, cv2.LINE_AA)
+        cv2.line(over, pa, pb, col, w, cv2.LINE_AA)
+        d = max(1, w // 5); hl = _mix(PAPER, col, 0.55)                     # the light stripe that makes a tube look round
+        cv2.line(over, (pa[0] - d, pa[1] - d), (pb[0] - d, pb[1] - d), hl, max(1, w // 4), cv2.LINE_AA)
+
+    side = lambda e: e[0] in GHOST_LEFT and e[1] in GHOST_LEFT
+    for a, b in [e for e in segs if not side(e)]: limb(a, b, deep)           # the right side behind the torso
+    torso = [j for j in (11, 12, 24, 23) if j in used]
+    if len(torso) == 4:
+        poly = np.array([ip(P[j]) for j in torso], np.int32)
+        cv2.fillPoly(over, [poly], _mix(color, INK, 0.38), cv2.LINE_AA); cv2.polylines(over, [poly], True, edge, max(2, w // 3), cv2.LINE_AA)
+    neck = 0.5 * (P[11] + P[12])
+    cv2.line(over, ip(neck), ip(head_c + (neck - head_c) * 0.45), edge, w + 2, cv2.LINE_AA)
+    cv2.circle(over, ip(head_c), int(hr), _mix(color, INK, 0.5), -1, cv2.LINE_AA)
+    cv2.circle(over, ip(head_c), int(hr), color, max(2, w // 3), cv2.LINE_AA)
+    cv2.circle(over, ip(P[0]), max(2, int(hr * 0.22)), light, -1, cv2.LINE_AA)  # the nose: which way he faces
+    for a, b in [e for e in segs if side(e)]: limb(a, b, color)              # the left side in front, lighter
+    for j in GHOST_JOINTS:
+        if j not in used: continue
+        r = max(3, int(w * 0.62)); c = color if j in GHOST_LEFT else deep
+        cv2.circle(over, ip(P[j]), r, PAPER, -1, cv2.LINE_AA); cv2.circle(over, ip(P[j]), r, c, max(2, w // 4), cv2.LINE_AA)
+    for j in (15, 16, 27, 28):                                               # hands and feet: solid balls in their side's colour
+        if j in used: cv2.circle(over, ip(P[j]), max(3, int(w * 0.85)), color if j in GHOST_LEFT else deep, -1, cv2.LINE_AA)
+    cv2.addWeighted(over, alpha, roi, 1 - alpha, 0, dst=roi)
+    return img
 
 
 def panel_rect(size, small=False):
@@ -276,7 +332,7 @@ def draw_panel(img, ghost, label, size, sub=None, highlight=False, small=False):
     s = min((x1 - x0 - 2 * pad) / gw, (y1 - y0 - top - pad) / gh)
     cx, cy = (x0 + x1) / 2, y0 + top + (y1 - y0 - top - pad) / 2
     anchor = np.array([cx - (gx0 + gx1) / 2 * s, cy - (gy0 + gy1) / 2 * s], np.float32)
-    draw_figure(img, anchor + g * s, None, color=CYAN, width=max(3, int(s * 0.07)), glow=0.9)
+    draw_mannequin(img, anchor + g * s, color=CYAN, width=max(3, int(s * 0.07)), alpha=0.95)
     tx.put_text(img, label, (x0 + 12, y0 + (22 if small else 30)), int((18 if small else 22) * s0), CYAN if highlight else PAPER, font='display')
     if sub and not small: tx.put_text(img, sub, (x0 + 12, y1 - 10), int(16 * s0), MUTE)
     return img
@@ -769,7 +825,7 @@ def draw_mode_cards(img, size, menu=None, t=0.0):
     tx.put_text(img, sub, (sx, hy + int(26 * s0)), fit_px(sub, int(12 * s0), (sx1 - sx) - pip_size(size)[0] - int(20 * s0), 'grotesk'), MUTE, font='grotesk')
     y0 = sy + pip_size(size)[1] + int(18 * s0)                # below Brodie's tile (top right) in both orientations
     y_end = sb - int(70 * s0)
-    gap = int(12 * s0); w = (sx1 - sx - gap * (cols - 1)) // cols; hgt = min(int(230 * s0), (y_end - y0 - gap * (rows - 1)) // rows)
+    gap = int(12 * s0); w = (sx1 - sx - gap * (cols - 1)) // cols; hgt = min(int(150 * s0), (y_end - y0 - gap * (rows - 1)) // rows)   # icon + title (+ badge)
     lit = menu.get('lit'); picked = menu.get('picked'); badges = menu.get('badges') or {}
     r = int(22 * s0 * 0.8)
     for i, card in enumerate(_modes.CARDS):
@@ -791,15 +847,9 @@ def draw_mode_cards(img, size, menu=None, t=0.0):
         tx1 = x + w - pad; tx0 = tx1 - tw_ - 2 * tp; ty0 = y + pad + int(4 * s0)
         rounded_outline(img, (tx0, ty0), (tx1, ty0 + th_), _mix(col, INK2, 0.4), r=th_ // 2, thick=1)
         tx.put_text(img, tag, ((tx0 + tx1) // 2, ty0 + th_ // 2), tpx, col, font='grotesk', anchor='mm')
-        ty = y + pad + isz + int(30 * s0)
-        tx.put_text(img, card['title'], (x + pad, ty), fit_px(card['title'], int(22 * s0), w - 2 * pad), PAPER, font='display')
+        ty = y + pad + isz + int(34 * s0)                         # the title only: the small description lines were unreadable on a phone (testers 2026-10-15)
+        tx.put_text(img, card['title'], (x + pad, ty), fit_px(card['title'], int(26 * s0), w - 2 * pad), PAPER, font='display')
         b = badges.get(card['mode'])
-        floor_y = y + hgt - int(10 * s0) - (int(30 * s0) if b else 0)          # keep the badge's row clear
-        lines = wrap(card['body'], int(13 * s0), w - 2 * pad, max_lines=3)
-        for j, ln in enumerate(lines):
-            ly = ty + int(24 * s0) + j * int(18 * s0)
-            if ly > floor_y: break
-            tx.put_text(img, ln, (x + pad, ly), int(13 * s0), MUTE)
         if b:
             bg = VOLT if b == 'FOR YOU' else (AMBER if b == 'REMATCH' else INK3)
             bpx = int(11 * s0); bw, _ = tx.text_size(b, bpx, 'grotesk')
@@ -818,7 +868,7 @@ def draw_break(img, size, brk, t=0.0):
         g = np.asarray(pv, np.float32); gx0, gy0 = g.min(axis=0); gx1, gy1 = g.max(axis=0)
         box_h = (sb - sy) * 0.42; sc = min(box_h / max(gy1 - gy0, 2.4), (sx1 - sx) * 0.5 / max(gx1 - gx0, 0.6))
         anchor = np.array([cx - (gx0 + gx1) / 2 * sc, cy - (gy0 + gy1) / 2 * sc], np.float32)
-        draw_figure(img, anchor + g * sc, None, color=CYAN, width=max(3, int(sc * 0.06)), glow=0.9, alpha=0.85)
+        draw_mannequin(img, anchor + g * sc, color=CYAN, width=max(3, int(sc * 0.06)), alpha=0.9)
     r = int(46 * s0); ring_c = (cx, int(sb - 120 * s0))
     cv2.circle(img, ring_c, r, LINE, max(3, int(4 * s0)), cv2.LINE_AA)
     cv2.ellipse(img, ring_c, (r, r), -90, 0, int(360 * left / dur), VOLT, max(4, int(6 * s0)), cv2.LINE_AA)
@@ -1028,10 +1078,10 @@ def draw_photo_card(photo, result, code=None, title=None, award_title=None, xp=N
     from .avatar import _blend
     _blend(out, stk, sx, sy)
     if code:
-        by1 = y1; by0 = by1 - int(190 * s0)
+        by1 = y1; by0 = by1 - int(240 * s0)
         pill_c(out, 'SCREENSHOT THIS', (x0 + x1) // 2, by0 - int(30 * s0), int(22 * s0), INK, PINK)   # the card only leaves the call as a screenshot
         plate(out, x0 - 8, by0, x1 + 8, by1, (26, 24, 24), 0.92, r=24)
-        qr_px = int(150 * s0)
+        qr_px = int(220 * s0)                                     # 150 px was ~4 px a cell: too soft to scan through FaceTime's compression
         qd = qr_payload(handle, code); has_qr = bool(qd) and draw_qr(out, qd, x1 - qr_px - 10, by0 + (by1 - by0 - qr_px) // 2, qr_px)
         tw = (x1 - qr_px - 30 - x0) if has_qr else (x1 - x0)
         tx.put_text(out, 'BEAT MY SCORE', (x0 + 12, by0 + int(40 * s0)), int(24 * s0), VOLT, font='display')

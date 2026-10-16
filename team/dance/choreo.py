@@ -31,7 +31,9 @@ STYLE_POOLS = {
 STYLE_TITLES = dict(hiphop='Hip-Hop', pop='Pop Choreo', house='House', waack='Waacking', krump='Krump', jazz='Street Jazz', lock='Locking',
                     fitness='Dance Cardio', daily='Daily Challenge')
 LEVEL_TITLES = dict(beginner='Starter', intermediate='Level Up', advanced='Pro')
-LEVEL_TEMPO = dict(beginner=0.8, intermediate=0.95, advanced=1.05)
+LEVEL_TEMPO = dict(beginner=0.65, intermediate=0.8, advanced=0.95)  # testers 2026-10-15: "too fast, make it followable" (was 0.8 / 0.95 / 1.05)
+SIMPLE_SEED = 10000                     # seeds from here on (new random routines) pick a beginner's moves from the simplest few in the pool;
+SIMPLE_DAILY = '20261017'               # older seeds and dailies keep their moves, so a code already shared still rebuilds the same routine
 LEVEL_PHRASES = dict(beginner=2, intermediate=3, advanced=4)       # beginners: two steps (the 3-4 s breaks between moves add time)
 LEVEL_INDEX = dict(beginner=1, intermediate=2, advanced=3)
 DAILY_ROTATION = ('hiphop', 'pop', 'house', 'fitness', 'waack', 'jazz', 'krump')    # Monday first
@@ -102,8 +104,13 @@ def pool(style):
     return [r for r in rows if r['key'].startswith(prefixes)] or rows      # a style the library lacks borrows the whole pool
 
 
-def _pick(rows, level, n, rng):
+def _pick(rows, level, n, rng, simple=False):
     order = ['beginner', 'intermediate', 'advanced']; li = order.index(level)
+    if simple and level == 'beginner':                 # the simplest moves of this style: n of the easiest max(2n, 4)
+        easiest = sorted(rows, key=lambda r: r['complexity'])[:max(2 * n, 4)]
+        chosen = rng.sample(easiest, min(n, len(easiest)))
+        chosen.sort(key=lambda r: r['complexity'])
+        return chosen, li
     pref = {'beginner': [0, 1, 2], 'intermediate': [1, 0, 2], 'advanced': [2, 1, 0]}[level]
     chosen = []
     for t in pref:                                     # fill from the preferred tier, then the neighbours
@@ -116,11 +123,13 @@ def _pick(rows, level, n, rng):
     return chosen, li
 
 
-def generate(style='hiphop', level='beginner', n_phrases=None, seed=None, name=None):
-    """A new routine key. Deterministic for (style, level, n_phrases, seed)."""
+def generate(style='hiphop', level='beginner', n_phrases=None, seed=None, name=None, simple=None):
+    """A new routine key. Deterministic for (style, level, n_phrases, seed). simple (default: seed >= SIMPLE_SEED): a beginner
+    routine takes the simplest moves of the style instead of any from the easiest third of the whole library."""
     style = STYLE_CODE.get(style, style)
     if level not in LEVEL_TITLES: level = 'beginner'
-    seed = int(seed if seed is not None else random.randint(1000, 9999))
+    seed = int(seed if seed is not None else random.randint(SIMPLE_SEED, 99999))
+    if simple is None: simple = seed >= SIMPLE_SEED
     rows = pool(style)
     if not rows: raise RuntimeError(f'no library phrases for style {style!r}')
     bpms = {}
@@ -128,7 +137,7 @@ def generate(style='hiphop', level='beginner', n_phrases=None, seed=None, name=N
     rows = max(bpms.values(), key=len)                 # one BPM so the phrases butt together on the grid
     n = int(n_phrases or LEVEL_PHRASES[level]); n = max(1, min(n, len(rows)))
     rng = random.Random(f'{style}:{level}:{n}:{seed}')
-    chosen, _ = _pick(rows, level, n, rng)
+    chosen, _ = _pick(rows, level, n, rng, simple=simple)
     parts = [phrase_slice(_key(r['key']), r['phrase']) for r in chosen]
     F = np.concatenate([p[0] for p in parts]); M = np.concatenate([p[1] for p in parts])
     E = np.concatenate([p[2] for p in parts]); S = np.concatenate([p[3] for p in parts])
@@ -145,7 +154,7 @@ def daily(date_str=None):
     """Today's challenge: everyone gets the same beginner routine; the style rotates by weekday."""
     d = datetime.date.today() if date_str is None else datetime.datetime.strptime(str(date_str), '%Y%m%d').date()
     style = DAILY_ROTATION[d.weekday()]; ymd = d.strftime('%Y%m%d')
-    key = generate(style, 'beginner', seed=int(ymd), name=f'gen_daily_{ymd}')
+    key = generate(style, 'beginner', seed=int(ymd), name=f'gen_daily_{ymd}', simple=ymd >= SIMPLE_DAILY)
     key['title'] = f"Daily: {STYLE_TITLES.get(style, style)}"; key['daily'] = ymd
     return key
 

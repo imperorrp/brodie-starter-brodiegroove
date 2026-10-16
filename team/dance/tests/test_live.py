@@ -159,6 +159,21 @@ def test_typing_bubble_drawn_while_thinking():
     assert land.shape[:2] == (720, 1280)
 
 
+def test_slow_speech_and_readable_ghost():
+    """Testers 2026-10-15: Brodie talked too fast; the ghost's skeleton didn't show which body part was which."""
+    assert 'slowly' in live.stage_direction(live.SAY_PREFIX + '"Hi!"') and 'slowly' in live.stage_direction('Ask their name.')
+    assert 'PACE.' in open(os.path.join(ROOT, 'team', 'dance', 'persona.md'), encoding='utf-8').read()
+    from team.dance import render as R
+    g = np.zeros((33, 2), np.float32)
+    for j, (x, y) in {0: (0, -1.55), 7: (0.12, -1.5), 8: (-0.12, -1.5), 11: (0.25, -1.1), 12: (-0.25, -1.1), 13: (0.45, -0.7), 14: (-0.45, -0.7),
+                      15: (0.55, -0.3), 16: (-0.55, -0.3), 23: (0.15, 0), 24: (-0.15, 0), 25: (0.17, 0.6), 26: (-0.17, 0.6), 27: (0.18, 1.2), 28: (-0.18, 1.2)}.items():
+        g[j] = (x, y)
+    img = np.zeros((400, 300, 3), np.uint8); R.draw_mannequin(img, g * 120 + (150, 210), width=10)
+    left, right = img[90:300, 150:300].astype(int).sum(), img[90:300, 0:150].astype(int).sum()
+    assert img.sum() > 0 and left != right                                     # the two sides are drawn in different shades
+    assert (img[int(-0.7 * 120 + 210), int(0.45 * 120 + 150)] > 200).all()     # a light joint ball on the elbow
+
+
 def test_pose_cache_memo_and_disk(tmp_path, monkeypatch):
     """The simulator asks MediaPipe once per distinct frame; the memo is shared across runs through a file."""
     from team.dance import multipose

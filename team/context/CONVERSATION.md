@@ -40,9 +40,9 @@ words), `addressed.py` / `answers.py` (was that said to Brodie, was that a yes),
 
 | # | Turn type | When | Exact form |
 |---|---|---|---|
-| 1 | **System instruction** | session start | `persona.md` (who Brodie is, the flow, tools, safety, privacy, "always speak English", "never read [bracketed] lines aloud", "ignore talk that isn't to you") |
+| 1 | **System instruction** | session start | `persona.md` (who Brodie is, the flow, tools, PACE (slow and clear, a pause after every sentence, energy from tone not speed), safety, privacy, "always speak English", "never read [bracketed] lines aloud", "ignore talk that isn't to you") |
 | 2 | **Background note** | state changes, camera, profile, each move's card, results | `[Background note for you only. Do not reply to it or read it out.] <facts>` |
-| 3 | **Stage direction** | every line our flow needs said | `[Stage direction from the system, not the caller. ...] Say exactly this to the caller, nothing before or after: "<line>"` |
+| 3 | **Stage direction** | every line our flow needs said | `[Stage direction from the system, not the caller. ...] Say exactly this to the caller, slowly and clearly, nothing before or after: "<line>"` (free-form asks end with "Speak slowly and clearly."; testers 2026-10-15 found him too fast) |
 | 4 | **Caller audio** | while the mic is open (off while Brodie's audio plays, except a 2.5 s barge-in window over the music) | Gemini replies, transcribes, may call a tool |
 | 5 | **Tool results** | after a tool call | short JSON (`will_happen`, `already_offered`, `counted`, `note`…) |
 
@@ -72,7 +72,7 @@ words (doubled lines, "(Private instruction…)" read aloud, live calls 2026-10-
 
 | Step | Brodie says / shows | What counts as the answer | Exit if nothing happens |
 |---|---|---|---|
-| Hello | "Hey, I'm Brodie! What are we doing: learn a routine, a ghost battle, or the daily? With friends: squad battle, telephone or a class." Six mode cards on screen (site copy and tags) | a mode name said to Brodie, a code, "what can you do", "surprise me" | after 10 s quiet (or a noisy room: 2 unusable lines in 15 s) a highlight steps through the cards every 2.5 s and **both hands up picks the card lit when the hold began**; nudges every 25 s; nobody seen or heard for 5 min ends the call |
+| Hello | "Hey, I'm Brodie! What are we doing: learn a routine, a ghost battle, or the daily? With friends: squad battle, telephone or a class." Six mode cards on screen (icon, tag and title; no small description text since 2026-10-16) | a mode name said to Brodie, a code, "what can you do", "surprise me" | after 10 s quiet (or a noisy room: 2 unusable lines in 15 s) a highlight steps through the cards every 2.5 s and **both hands up picks the card lit when the hold began**; nudges every 25 s; nobody seen or heard for 5 min ends the call |
 | Offer | "Ghost Battle! Want to start a 3-round hip-hop ghost battle? Say yes, or raise both hands again." | yes, request-style yes, Gemini's `caller_answered`, hands up (a fresh hold) | re-asked up to 3 times; "no" → back to the cards, no line |
 | Camera check | one fix at a time; turned or facing away gets "Turn a little to your right to face me" / "Turn around to face me" | the camera showing the fix (≥ 65% good frames over 1.5 s; thresholds with hysteresis) | same fix at most every 20 s; arms-only offered; a flip-flop (A, B, A, B in a minute) → "Stay right there, that works"; 150 s per round, **180 s across all rounds** |
 | Space | "...two big steps of clear space? Say yes, or raise both hands." Asked again for every new activity (not for a rematch within 10 min) | yes or hands up | 2 nudges, then trusted |

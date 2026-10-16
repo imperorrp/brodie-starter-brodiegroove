@@ -197,7 +197,8 @@ PERSONA_PROMPTS = dict(
 UPPER_WORDS = ('upper body', 'at my desk', 'sitting', "can't stand", 'cant stand', 'laptop', 'just my arms', 'arms only')
 NUM_WORDS = {'zero': '0', 'oh': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9'}
 NUDGE_S = float(os.environ.get('DANCE_NUDGE_S', '45') or 45)      # quiet chat this long: Brodie offers a routine once (never starts one)
-RUNGS = (0.5, 0.6, 0.75, 0.9, 1.0)                                   # the teaching ladder: tempo multipliers of the routine's BPM (0.5 = very slow)
+RUNGS = (0.45, 0.55, 0.65, 0.8, 0.9)                                 # the teaching ladder: tempo multipliers of the routine's BPM (testers 2026-10-15:
+                                                                     # "too fast"; was 0.5 .. 1.0); the library is 110 bpm, so 50 to 99 bpm
 START_RUNG = dict(beginner=0, intermediate=1, advanced=2)
 MOVE_TARGET = 2                                                      # a single move is "learned" at 0.75x; the full routine climbs to 0.9x
 ROUTINE_TARGET = 3
@@ -214,7 +215,8 @@ STATE_RULES = dict(
     REVIEW="STATE: RESULTS. Speak only the short line the system asks for, then wait.",
     PAUSED="STATE: PAUSED. If they speak, say they can say resume or raise both hands. Nothing else.",
     SAFETY="STATE: SAFETY STOP. Tell them to rest. Say nothing about dancing.")
-LEVEL_CFG = dict(beginner=dict(tempo=0.8, show=2, pass_mark=75), intermediate=dict(tempo=0.95, show=2, pass_mark=80), advanced=dict(tempo=1.05, show=1, pass_mark=85))
+LEVEL_CFG = dict(beginner=dict(tempo=choreo.LEVEL_TEMPO['beginner'], show=2, pass_mark=75), intermediate=dict(tempo=choreo.LEVEL_TEMPO['intermediate'], show=2, pass_mark=80),
+                 advanced=dict(tempo=choreo.LEVEL_TEMPO['advanced'], show=1, pass_mark=85))
 MAX_ATTEMPTS = 3
 MODE_LABEL = dict(learn='Learn', battle='Ghost Battle', daily='Daily Challenge', telephone='Telephone', class_='Class', squad_battle='Squad Battle',
                   squad_learn='Squad Learn', **{'class': 'Class', 'class_record': 'Class'})
@@ -372,8 +374,8 @@ def stage_direction(prompt):
     took our "Say this..." for its own words and continued them: lines said twice, the "(Private instruction...)" prefix read out
     (live calls 2026-10-11). A user turn is something to act on, not something already said."""
     p = prompt.strip()
-    if p.startswith(SAY_PREFIX): return STAGE + 'Say exactly this to the caller, nothing before or after: ' + p[len(SAY_PREFIX):]
-    return STAGE + p
+    if p.startswith(SAY_PREFIX): return STAGE + 'Say exactly this to the caller, slowly and clearly, nothing before or after: ' + p[len(SAY_PREFIX):]
+    return STAGE + p + ' Speak slowly and clearly.'          # testers 2026-10-15: "the way Brodie speaks is super fast"
 
 
 def tune_realtime(rt):
@@ -3140,7 +3142,7 @@ class DanceSession:
         await self.finish_session('battle', total=total, best_r=best_r)
 
     async def daily(self):
-        """Today's routine, same for everyone: learn the first two steps, then ONE shot at today's board (the full routine at 0.9x;
+        """Today's routine, same for everyone: learn the first two steps, then ONE shot at today's board (the full routine at RUNGS[3], 0.8x;
         that run alone is posted and ranked). After the day's shot it's practice: the same flow, nothing posted."""
         if not self.key.get('daily'): self.key = choreo.daily()
         self.extras['daily'] = True
@@ -3312,6 +3314,12 @@ class DanceSession:
                                perfects=perfects, total_line=(f"{total:.0f}/300" if total is not None else None),
                                lines=([f"vs {versus['name']}: winner {winner}"] if versus else []), photo=photo, brag=brag)
         self.log.append(dict(t=round(self.now() - self.t0, 2), event='result_posted', code=self.my_code, versus=versus, winner=winner, xp=(aw or {}).get('gained')))
+        from team.dance.render import qr_payload
+        qd = qr_payload(self.handle, self.my_code)
+        why = ('' if self.my_code else ' (no code: the post failed, or a lost battle)') + \
+              ('' if os.environ.get('DANCE_PUBLIC_URL') else ' (DANCE_PUBLIC_URL unset: no result page to link)')
+        print(f'[dance] scorecard: code {self.my_code or "none"}, QR {qd or "none"}{why}', flush=True)    # why a card has no QR
+        self.telemetry.event('scorecard', code=bool(self.my_code), qr=('page' if qd and '/r/' in qd else 'facetime' if qd else 'none'))
         await self.idle(9.0)
         if mode == 'battle' and self.my_code and len(getattr(self, 'ghost_rounds', []) or []) >= 2 and not self.stop:
             await self.offer_ghost_save(total)

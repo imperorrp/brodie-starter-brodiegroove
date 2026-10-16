@@ -66,6 +66,23 @@ def test_choreo_beginner_length_and_selfscore():
     assert score_phrase(Fl, Ml, El, F, M, E, pb)['score'] >= 95
 
 
+def test_choreo_simple_beginner_moves_and_old_codes_kept():
+    """New routines (seeds from SIMPLE_SEED) take a beginner's moves from the simplest few of the style; older seeds and dailies
+    rebuild exactly the routine a shared code was made with (testers 2026-10-15: "simpler steps")."""
+    old = choreo.generate('hiphop', 'beginner', seed=42)
+    assert old['features'] == choreo.generate('hiphop', 'beginner', seed=42, simple=False)['features']
+    rows = sorted(choreo.pool('hiphop'), key=lambda r: r['complexity']); n = choreo.LEVEL_PHRASES['beginner']
+    easiest = {(r['key'], r['phrase']) for r in rows[:max(2 * n, 4)]}
+    for seed in (10001, 23456, 99999):
+        k = choreo.generate('hiphop', 'beginner', seed=seed)
+        assert {(m['src'], m['phrase']) for m in k['moves']} <= easiest
+        assert choreo.from_name(k['name'])['features'] == k['features']
+    thu = choreo.DAILY_ROTATION[3]                                           # 2026-10-15 was a Thursday: today's board keeps its routine
+    assert choreo.daily('20261015')['features'] == choreo.generate(thu, 'beginner', seed=20261015, simple=False)['features']
+    from team.dance import live
+    assert choreo.LEVEL_TEMPO['beginner'] <= 0.65 and live.LEVEL_CFG['beginner']['tempo'] == choreo.LEVEL_TEMPO['beginner'] and max(live.RUNGS) <= 0.9
+
+
 def test_choreo_combined_and_pools():
     k = choreo.generate('house', 'intermediate', seed=3)
     k2, idx = choreo.with_combined(k, 1)
