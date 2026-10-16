@@ -448,7 +448,14 @@ def patch_voice_layer():
     return True
 
 
-try: patch_voice_layer()
+def in_worker():
+    """True when a worker loaded this file (it imports facetime.voice before the handlers, and `python -m facetime.worker` is a
+    __main__ with CONSUMERS). The simulator and the tests skip the facetime imports: livekit.agents and torch cost 30-50 s each run."""
+    return 'facetime.voice' in sys.modules or 'facetime.worker' in sys.modules or hasattr(sys.modules.get('__main__'), 'CONSUMERS')
+
+
+try:
+    if in_worker(): patch_voice_layer()
 except Exception as _e: print(f'[dance] voice patch failed: {_e!r}', flush=True)
 
 
@@ -506,6 +513,7 @@ class DanceSession:
         self.mood = None; self.mood_until = -1.0                 # Brodie's face (avatar.py MOODS): a reaction that expires, see set_mood
         self.exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix='dance-pose')
         self.source = None; self.writer = None; self.last_seq = -1; self.frames = 0; self.pose_ms = []
+        self.pose_cache = None; self.render_every = 1              # the simulator only: pose per distinct frame (PoseCache), every Nth frame drawn
         self.last_lm = None; self.log = []; self.t0 = None; self.published = False
         self.mirror_view = (os.environ.get('DANCE_MIRROR_VIEW', '1') or '1').strip().lower() in ('1', 'true', 'yes', 'on')
         self.size = (W, H)                                       # the canvas; set from the caller's first frame (portrait phone or landscape webcam)
@@ -577,6 +585,8 @@ class DanceSession:
         self.call_max_s = 60.0 * float(os.environ.get('DANCE_CALL_MAX_MIN', '20') or 20)        # a soft cap per call (the team's Live minutes)
         self.subject_luma = None; self.fall_since = None
         self.last_addressed_t = -1e9             # the caller last said something short / to Brodie (gates Gemini's offers in CHOOSE)
+        self.reply_wait_t = -1e9; self.reply_wait_mono = -1e9   # a reply is on its way (the caller finished a line to Brodie, or we placed one)
+        self.spoke_t = -1e9; self.coach_text_t = -1e9            # Brodie's audio last played; Gemini's last reply landed (its transcript)
         self.noise_utts = []                     # times of unusable utterances while choosing (a noisy room starts the card picker)
         self.played = []                         # modes played this call (PLAYED badges, the rematch shortcut)
         self.card_shown_t = None                 # when the score card went up (it stays CARD_HOLD_S before the menu)
@@ -714,8 +724,9 @@ class DanceSession:
             if (q['epoch'] != self.epoch and not q['urgent']) or stale:
                 self.say_q.pop(0); self.telemetry.event('speech_dropped', key=q['key'], state=self.state)
                 self.log.append(dict(t=round(now - (self.t0 or 0), 2), ask=q['prompt'][:90], note='dropped: stale')); continue
-            listening = now - self.last_caller_text_t < 6.0 and not q['urgent']          # the caller just spoke: Gemini answers, we wait
-            model = self._model()
+            model = self._model()                                                # the caller just spoke: Gemini answers, we wait (6 s, or
+            answered = max(self.coach_text_t, float(getattr(model, 'last_coach_t', -1e9) or -1e9)) > self.last_caller_text_t + 0.8   # 1 s once its answer has played)
+            listening = now - self.last_caller_text_t < (1.0 if answered else 6.0) and not q['urgent']
             thinking = getattr(getattr(model, 'session', None), 'agent_state', None) == 'thinking'
             ready = (model is None or getattr(model, 'started', False)) and self._audio_idle() and not self._model_speaking() and self._caller_quiet() \
                 and not listening and not thinking
@@ -739,6 +750,7 @@ class DanceSession:
             self.log.append(dict(t=round(self.now() - (self.t0 or 0), 2), ask=q['prompt'][:90], result=r, key=q['key']))
             self.telemetry.event('speech', key=q['key'], state=self.state)
             t_ask = self.now(); started = None
+            self.reply_wait_t = t_ask; self.reply_wait_mono = time.monotonic()  # the line is being prepared (~1 s): the thinking dots
             if self._timed():                                                    # wait for the audio to start, then to end
                 while self.now() - t_ask < 6.0 and not getattr(self.job, 'closed', False):
                     if not self._audio_idle() or self._model_speaking(): started = self.now(); break
@@ -813,7 +825,7 @@ class DanceSession:
         if ev.get('type') != 'voice': return
         now = self.now()
         if ev.get('role') == 'coach':
-            text = ev.get('text', ''); self.caption = (text, now)
+            text = ev.get('text', ''); self.caption = (text, now); self.coach_text_t = now
             if self.state in ('EXPLORE', 'OFFER', 'PREPARE') and FALSE_PROGRESS_RE.search(text) and not text.startswith(SAY_PREFIX):
                 self.metrics['false_progress'] += 1; self.telemetry.event('false_progress', state=self.state, text=text[:80])
             if '?' in text:
@@ -830,6 +842,7 @@ class DanceSession:
         self.last_addr = addr; addressed = addr >= addr_mod.ADDRESSED_AT
         if addressed:                                                # talk that isn't to Brodie (TV, friends) never resets the silence timers
             self.deadair.activity(now, caller=True); self.last_addressed_t = now
+            self.reply_wait_t = now; self.reply_wait_mono = time.monotonic()   # Gemini is working on an answer: the thinking dots
         else:
             self.metrics['nonaddressed'] = self.metrics.get('nonaddressed', 0) + 1; self.telemetry.event('nonaddressed', state=self.state, score=round(addr, 2))
             if addr <= addr_mod.IGNORE_AT and self.state in ('CHOOSE', 'OFFER', 'CONFIRM', 'REVIEW', 'ACTIVITY') and \
@@ -945,15 +958,28 @@ class DanceSession:
 
     def avatar_state(self, speaking):
         """What Brodie's avatar shows, from real signals: offline (no voice), speaking (his audio is playing), listening (the
-        caller is talking), thinking (a line is being prepared), else idle."""
+        caller is talking), thinking (the caller finished a line to him, a line of ours is queued or being prepared, or Gemini runs
+        a tool: the gap before his answer, which read as dead air), else idle."""
         v = getattr(self.job, 'voice', None); model = getattr(v, 'model', None)
         if v is None or getattr(v, 'ask_voice', None) is None: return 'offline'
         if self.now is time.monotonic and model is not None and not getattr(model, 'started', False): return 'offline'
-        if speaking: return 'speaking'
+        now = self.now()
+        pre_audio = speaking and getattr(v, 'mix', None) is not None and self._audio_idle()     # his turn began, no audio in the mixer yet
+        if speaking and not (pre_audio and self.thinking(now)): self.spoke_t = now; return 'speaking'
         last = getattr(model, 'last_caller_t', None)
-        if (last is not None and time.monotonic() - float(last) < 1.0) or self.now() - self.last_caller_text_t < 1.5: return 'listening'
+        talking = last is not None and time.monotonic() - float(last) < 1.0
+        if self.thinking(now) and not (talking and float(last) > self.reply_wait_mono + 0.3): return 'thinking'   # unless they kept talking
+        if talking or now - self.last_caller_text_t < 1.5: return 'listening'
         if self.say_q: return 'thinking'
         return 'idle'
+
+    THINK_S = 6.0           # the longest the thinking dots wait for an answer that never comes
+
+    def thinking(self, now):
+        """A reply is on its way and nothing of Brodie's has played since it was asked for: the caller finished a line to him or one
+        of our lines was placed (at most THINK_S ago), or Gemini is running a tool (livekit's only "thinking" for a realtime model)."""
+        if self.reply_wait_t > self.spoke_t and now - self.reply_wait_t < self.THINK_S: return True
+        return getattr(getattr(self._model(), 'session', None), 'agent_state', None) == 'thinking'
 
     def set_mood(self, mood, seconds):
         """Brodie's face reacts for a few seconds (avatar.py MOODS), then falls back to cur_mood's resting face."""
@@ -1492,6 +1518,8 @@ class DanceSession:
         return await asyncio.get_running_loop().run_in_executor(self.exec, self._prepare_sync, frame, ms)
 
     async def render_push(self, bgr, lm, hud, ghost=None, card=None, extra=None):
+        if self.render_every > 1 and self.frames % self.render_every:   # the eval's simulator draws every Nth frame (its mp4 runs at fps / N)
+            self.frames += 1; return
         vf = await asyncio.get_running_loop().run_in_executor(self.exec, self._render_sync, bgr, lm, hud, ghost, card, extra)
         if vf is not None: self.source.capture_frame(vf)
         self.frames += 1
@@ -1512,22 +1540,26 @@ class DanceSession:
     def _pose_sync(self, rgb, ms):
         if self.pose_reload:                                 # the budget guard asked for another model: close the old one here, on this thread
             self.pose_reload = False; self._close_pose_sync()
-        if self.mpose is None and self.pose is None:
-            try:
-                from team.dance.multipose import MultiPose
-                self.mpose = MultiPose(self.pose_variant, video=True, max_poses=int(os.environ.get('DANCE_MAX_POSES', '4') or 4))
-            except Exception as e:
-                print(f'[dance] multi-person pose unavailable ({e!r}); single person', flush=True)
-                from rtcoach.pose import Pose
-                self.pose = Pose(self.pose_variant, video=True)
         s = min(rgb.shape[:2])
         if s > self.pose_px:
             f = self.pose_px / s; rgb = cv2.resize(rgb, (max(1, round(rgb.shape[1] * f)), max(1, round(rgb.shape[0] * f))), interpolation=cv2.INTER_AREA)
-        t = time.perf_counter()
-        if self.mpose is not None: poses = self.mpose(np.ascontiguousarray(rgb), ms)
-        else:
-            lm, w = self.pose(np.ascontiguousarray(rgb), ms); poses = [(lm, w)] if lm is not None else []
-        self.pose_ms.append((time.perf_counter() - t) * 1000)
+        rgb = np.ascontiguousarray(rgb)
+        poses = self.pose_cache.get(rgb) if self.pose_cache is not None else None
+        if poses is None:
+            if self.mpose is None and self.pose is None:
+                try:
+                    from team.dance.multipose import MultiPose
+                    self.mpose = MultiPose(self.pose_variant, video=True, max_poses=int(os.environ.get('DANCE_MAX_POSES', '4') or 4))
+                except Exception as e:
+                    print(f'[dance] multi-person pose unavailable ({e!r}); single person', flush=True)
+                    from rtcoach.pose import Pose
+                    self.pose = Pose(self.pose_variant, video=True)
+            t = time.perf_counter()
+            if self.mpose is not None: poses = self.mpose(rgb, ms)
+            else:
+                lm, w = self.pose(rgb, ms); poses = [(lm, w)] if lm is not None else []
+            self.pose_ms.append((time.perf_counter() - t) * 1000)
+            if self.pose_cache is not None: self.pose_cache.put(rgb, poses)
         self.n_people = len(poses)
         self.tracker.squad = self.call_mode == 'squad' or self.mode in SQUAD_MODES or self.mode == 'class'
         self.tracker.activity = self.state in ('ACTIVITY', 'REVIEW', 'PAUSED')            # mid-routine: walk-ins never take the lock
@@ -1579,7 +1611,7 @@ class DanceSession:
             os.makedirs(os.path.dirname(os.path.abspath(self.debug_mp4)) or '.', exist_ok=True)
             if self.now is time.monotonic:                       # live: one file per call (two calls at once were overwriting each other)
                 base, ext = os.path.splitext(self.debug_mp4); self.debug_mp4 = f"{base}_{time.strftime('%H%M%S')}{ext or '.mp4'}"
-            self.writer = cv2.VideoWriter(self.debug_mp4, cv2.VideoWriter_fourcc(*'mp4v'), self.fps, self.size)
+            self.writer = cv2.VideoWriter(self.debug_mp4, cv2.VideoWriter_fourcc(*'mp4v'), self.fps / max(1, self.render_every), self.size)
             print(f'[dance] DEV RECORDING ON: what the caller sees goes to {self.debug_mp4} (DANCE_DEBUG_MP4; never enable for real callers)', flush=True)
         STATE['session'] = self
         print(f"[dance] session: key {self.key['name']} ({self.key['bpm']:.0f} bpm, {len(self.key['phrases'])} phrases), mode {self.mode}, tempo {self.tempo}, rtt {self.rtt_s} s; "
@@ -3703,7 +3735,7 @@ def _register_consumer():
 
 
 try:
-    _registered_on = _register_consumer()
+    _registered_on = _register_consumer() if in_worker() else []
     _worker = sys.modules.get('facetime.worker')
     if _registered_on: STATE['registered'] = True
 except Exception:          # imported outside the worker (simulator, tests)
@@ -3711,6 +3743,53 @@ except Exception:          # imported outside the worker (simulator, tests)
 
 
 # ---- simulator ----
+class PoseCache:
+    """The simulator's pose memo: MediaPipe's people per distinct frame. The stand-in caller is one short clip (a still frame most of
+    the session), so a 400 s run asked the model the same few hundred frames thousands of times (about 200 of its 330 s). With a
+    path (DANCE_POSE_CACHE, set by the eval) the memo is shared across runs: loaded at start, merged back at the end. A cached frame
+    skips MediaPipe's tracking history, which is fine for the simulator and never used live."""
+    def __init__(self, path=None, tag=''):
+        self.path = path; self.tag = tag; self.mem = {}; self.new = {}; self.hits = 0; self.misses = 0
+        if path and os.path.exists(path):
+            try:
+                import pickle
+                with open(path, 'rb') as f: self.mem = pickle.load(f).get(tag, {})
+            except Exception as e: print(f'[sim] pose cache unreadable ({e!r}); starting empty', flush=True)
+
+    @staticmethod
+    def _key(rgb):
+        import hashlib
+        return hashlib.blake2b(rgb.tobytes(), digest_size=16).hexdigest() + f'{rgb.shape}'
+
+    @staticmethod
+    def _copy(poses):
+        return [(None if l is None else l.copy(), None if w is None else w.copy()) for l, w in poses]
+
+    def get(self, rgb):
+        p = self.mem.get(self._key(rgb))
+        if p is None: self.misses += 1; return None
+        self.hits += 1; return self._copy(p)
+
+    def put(self, rgb, poses):
+        k = self._key(rgb); self.mem[k] = self.new[k] = self._copy(poses)
+
+    def save(self):
+        if not self.path or not self.new: return
+        import pickle
+        try:
+            data = {}
+            if os.path.exists(self.path):
+                try:
+                    with open(self.path, 'rb') as f: data = pickle.load(f)
+                except Exception: data = {}
+            data.setdefault(self.tag, {}).update(self.new)
+            os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
+            tmp = f'{self.path}.{os.getpid()}.tmp'
+            with open(tmp, 'wb') as f: pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(tmp, self.path)                               # parallel runs: the last one wins, nothing is ever half-written
+        except Exception as e: print(f'[sim] pose cache not saved: {e!r}', flush=True)
+
+
 class _FakePlayer:
     def __init__(self, log, now): self.log = log; self.now = now; self.playing = None
     def say(self, text, intent='other', meta=None): self.log.append(dict(t=round(self.now(), 2), say=text, intent=intent)); return dict(status='ok')
@@ -3825,6 +3904,9 @@ async def simulate(video, key, mode, out, offset=0.0, fast=True, tempo=1.0, rtt=
     job.latest = (frame_at(0.0), 0, 0.0, 0.0, 0)
     s = DanceSession(job, key_name=key, mode=mode, tempo=tempo, rtt_s=rtt, fps=fps, pose_variant=pose_variant, debug_mp4=out, now=now, sleep=fake_sleep)
     s.log = log; s.engine_holder = holder; s.lobby_enabled = bool(lobby); sim['s'] = s
+    pc = (os.environ.get('DANCE_POSE_CACHE') or '').strip()                # a path shares it across runs; off = MediaPipe on every frame
+    s.pose_cache = None if pc.lower() == 'off' else PoseCache(pc or None, tag=f"{pose_variant}:{os.environ.get('DANCE_MAX_POSES', '4')}:{s.pose_px}")
+    s.render_every = max(1, int(os.environ.get('DANCE_SIM_RENDER_EVERY', '1') or 1))
     real = s._gestures; done = set()                       # scripted held poses; like the real detector, one hold fires once
     def scripted(now_, lm, in_attempt):
         for (tg, kind, secs) in gest_list:
@@ -3837,6 +3919,8 @@ async def simulate(video, key, mode, out, offset=0.0, fast=True, tempo=1.0, rtt=
     s._gestures = scripted
     if name: s.name = name                                   # what the caller would have said ("I'm Maya")
     await s.run()
+    if s.pose_cache is not None:
+        s.pose_cache.save(); print(f'[sim] pose: {s.pose_cache.misses} frames through MediaPipe, {s.pose_cache.hits} from the cache', flush=True)
     print(json.dumps([e for e in log if 'say' in e or 'ask' in e or 'caller' in e][:80], indent=0))
     for r in s.rounds:
         res = r.get('result') or {}

@@ -115,6 +115,14 @@ Today a cropped-webcam caller lands 10 to 15 points above random noise against t
 
 ## 4. Conversation and coaching (from `CONVERSATION.md` §8 and `PLANNED_IMPROVEMENTS.md` §3)
 
+- [x] **Thinking indicator** (2026-10-15): a typing bubble under the tile and in chat from the end of the caller's line until
+      Brodie's audio starts; our next line follows 1 s after the caller once Gemini has answered (was a flat 6 s). Unit + render
+      verified.
+- [ ] **See the thinking bubble on a real call**: check that it shows during Gemini's gap and stops with his first word (the
+      Gemini turn can start a little before its audio; `avatar_state` treats that moment as thinking only on a real mixer).
+- [ ] **Optional sound while he thinks** (a soft tick): not done because any Brodie audio closes the echo guard, so the caller's
+      next words would be dropped; it would need the guard to ignore that one clip.
+
 - [ ] **True barge-in while Brodie talks**: the echo guard drops the caller's audio while Brodie speaks; sending silence
       instead of dropping frames is a starter change (`Floor.gate_input`).
 - [ ] **Speaker check for yes** (require the caller's own voice; needs a speaker model).

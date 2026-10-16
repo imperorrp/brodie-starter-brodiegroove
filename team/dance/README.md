@@ -65,7 +65,7 @@ States (`live.py`): **EXPLORE** (chat) -> **OFFER** -> **PREPARE** (camera) -> *
   - Silence never skips ahead: Brodie checks in once, then keeps waiting. Steps are combined after they are learned, and full speed
     is only offered as a final challenge.
 - **Avatar** (`avatar.py`): Brodie from the official character kit (`assets/brodie/`, kit art only, passes the kit's
-  `check_cream.py`). States: idle, listening (volt ring), speaking (grin / closed-smile mouth), thinking (dots), offline (sleepy).
+  `check_cream.py`). States: idle, listening (volt ring), speaking (grin / closed-smile mouth), thinking (a typing bubble from the caller's last word until his voice starts), offline (sleepy).
   Big beside his words in chat, small top-left while you dance. Kit typography: Archivo + Plus Jakarta Sans.
 - **FaceTime first:** callers through Chert get a portrait 720x1280 video (`DANCE_CANVAS=auto|portrait|landscape`) so a portrait
   iPhone shows everything. All HUD stays inside a safe area clear of FaceTime's controls and self-view tile.

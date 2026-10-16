@@ -7,7 +7,8 @@ grin or the open eye and drawing an ink #1A1919 arc in the kit's line weight. No
 tools/check_cream.py, run by the tests).
 
 States (driven by real signals in live.py): idle (slow breathing bob), listening (volt ring pulses while the caller talks),
-speaking (mouth alternates about 7 times a second while his audio plays), thinking (three dots while a line is being prepared),
+speaking (mouth alternates about 7 times a second while his audio plays), thinking (a typing bubble, three hopping dots, from the
+end of the caller's line or our ask until his audio starts),
 offline (both eyes closed, "sleepy", when the voice isn't available). This is a speaking animation, not phoneme lip-sync.
 
 Moods (live.py sets one from the last verdict, score, grade and coach style; the kit's "yours to change: expression, pose"):
@@ -178,11 +179,26 @@ class BrodieAvatar:
             spr = _circle_clip(spr, cx - x, cy - y, r - max(3, h // 28))
         _blend(img, spr, x, y)
         if state == 'thinking' and not still:
-            for i in range(3):
-                a = 0.5 + 0.5 * math.sin(t * 6 - i * 0.9)
-                c = (int(cx + r * 0.55 + i * h * 0.09), int(cy - r * 0.95))
-                cv2.circle(img, c, max(3, h // 26), tuple(int(v * (0.5 + 0.5 * a)) for v in VOLT_BGR), -1, cv2.LINE_AA)
+            typing_bubble(img, cx + r * 0.75, cy - r * 0.95, h * 0.36, t)
         return img
+
+
+def typing_bubble(img, cx, cy, w, t, alpha=0.9):
+    """A chat app's "typing" bubble centred on (cx, cy), w px wide: a dark pill with three volt dots hopping in turn. Brodie is
+    working on an answer (the second or two before his voice starts, which on a call otherwise reads as dead air)."""
+    H, W = img.shape[:2]; w = int(w); h = max(14, int(w * 0.42)); r = h // 2
+    x0, y0 = int(cx - w / 2), int(cy - h / 2)
+    if x0 < 0 or y0 < 0 or x0 + w > W or y0 + h > H: return img
+    roi = img[y0:y0 + h, x0:x0 + w]; over = roi.copy()
+    cv2.rectangle(over, (r, 0), (w - r - 1, h - 1), PANEL_BGR, -1)
+    for x in (r, w - r - 1): cv2.circle(over, (x, r), r, PANEL_BGR, -1, cv2.LINE_AA)
+    cv2.addWeighted(over, alpha, roi, 1 - alpha, 0, dst=roi)
+    dr = max(2, h // 7); gap = w / 4.0
+    for i in range(3):
+        hop = max(0.0, math.sin(((t * 1.8 - i * 0.16) % 1.0) * 2 * math.pi))      # each dot hops in turn, then rests
+        c = (int(x0 + gap * (i + 1)), int(y0 + r - hop * h * 0.16))
+        cv2.circle(img, c, dr, tuple(int(v * (0.55 + 0.45 * hop)) for v in VOLT_BGR), -1, cv2.LINE_AA)
+    return img
 
 
 @lru_cache(maxsize=16)
@@ -206,7 +222,7 @@ def _tile_pixels(variant, w, h, bob):
 
 def _draw_tile(self, img, x0, y0, w, h, state='idle', t=0.0, still=False, mood='happy'):
     """Brodie in a FaceTime-style picture-in-picture tile (the site's .pip): kit cream background, rounded corners, a thin light
-    border; the border turns volt and pulses while he talks or listens; three dots while he is thinking."""
+    border; the border turns volt and pulses while he talks or listens; a typing bubble on its bottom edge while he is thinking."""
     H, W = img.shape[:2]; x0, y0, w, h = int(x0), int(y0), int(w), int(h)
     if x0 < 0 or y0 < 0 or x0 + w > W or y0 + h > H: return img
     r = max(6, w // 7); m = _round_mask(h, w, r)
@@ -221,10 +237,8 @@ def _draw_tile(self, img, x0, y0, w, h, state='idle', t=0.0, still=False, mood='
         cv2.line(img, a, b, col, wd, cv2.LINE_AA)
     for (cx, cy), ang in (((x0 + r, y0 + r), 180), ((x0 + w - r - 1, y0 + r), 270), ((x0 + w - r - 1, y0 + h - r - 1), 0), ((x0 + r, y0 + h - r - 1), 90)):
         cv2.ellipse(img, (cx, cy), (r, r), ang, 0, 90, col, wd, cv2.LINE_AA)
-    if state == 'thinking' and not still:
-        for i in range(3):
-            a = 0.5 + 0.5 * math.sin(t * 6 - i * 0.9)
-            cv2.circle(img, (x0 + w // 2 - w // 6 + i * w // 6, y0 + h - max(8, h // 12)), max(3, w // 24), tuple(int(v * (0.5 + 0.5 * a)) for v in VOLT_BGR), -1, cv2.LINE_AA)
+    if state == 'thinking' and not still:                   # the typing bubble just under the tile (the BRODIE lettering stays visible)
+        bw = int(w * 0.66); typing_bubble(img, x0 + w // 2, y0 + h + max(14, int(bw * 0.42)) // 2 + max(4, h // 30), bw, t)
     return img
 
 

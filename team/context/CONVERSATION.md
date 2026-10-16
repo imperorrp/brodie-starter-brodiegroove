@@ -95,6 +95,10 @@ instead") between moves leaves the current one and offers the new one; during th
 leave the tip choice, and leave scoring with `DANCE_DEPTH_GATE=1`) → banded DTW → verdict per count (green < 18°, amber < 32°) → score →
 up to three ranked tips → PERFECT / NICE / MISS, the combo, the count tiles.
 
+**While he thinks** (the gap between the caller's last word and his first, or before one of our lines plays): a typing bubble
+with three hopping volt dots under the tile, and in chat views a bigger one in place of his last line. It stops when his audio
+starts, after 6 s if no answer comes, or if the caller keeps talking.
+
 **Brodie's face** (the PiP tile) reacts without a word: a PERFECT streak of 4 / 8 / 16 flashes the flex pose (chill: 8 / 16 only),
 two MISSes in a row bring the encouraging face (brows up), a scored try shows pumped (85+; hype 75+, chill 92+), happy, or
 encourage (under 50), a K.O. win or loss and a level-up react too; between reactions he is focused while you dance and with the
@@ -114,6 +118,7 @@ COACH style, else happy. The scorecard sticker follows the grade (S/A flex, B ha
 | Setup flip-flop for minutes | step back / come closer at a threshold; ready check bouncing back for small drifts | hysteresis bands, flip-flop breaker, 180 s total cap, ready check bounces only for a real break |
 | A tick over Brodie's count line | the voice paused mid-word (clipped lines) | no tick while a line is pending or playing |
 | Two replies glued together | a line placed while Gemini was still thinking | the speaker waits for `agent_state != thinking` |
+| Dead air while Brodie "thinks" | the caller finished, then 1-3 s of nothing (realtime Gemini reports no thinking state outside tools); our next line also waited a flat 6 s after the caller even when Gemini had already answered | a typing bubble (three hopping dots) under his tile, and in chat where his words will appear, from the end of a line said to him (or our line being placed) until his audio starts, at most 6 s; our queued line follows 1 s after the caller once Gemini's answer has played |
 | Gemini claims progress ("camera's locked in") | false progress | rule in every lobby state; tool results say "nothing has started"; logged as `false_progress` |
 | "one two three four" heard as a code | a battle code offer from a count-in | outside the menu a code needs the word "code" or a short line, and counting runs are refused |
 | Squad "ready" by hands up | needed every dancer's hold in the same frame (never happened) | a majority of dancers within 3 s |
@@ -180,6 +185,6 @@ COACH style, else happy. The scorecard sticker follows the grade (S/A flex, B ha
 
 ## 9. How to test
 
-- **Unit tests:** `.venv/Scripts/python -m pytest -q team/dance/tests` (163).
-- **Eval:** `.venv/Scripts/python -m team.dance.eval.run_eval --jobs 6` (45 scenarios, plus the duel). `real_*` use real-call timing and a caller who answers Brodie's actual lines (`--realistic --answer key:text`); `choose_*` cover the cards; `battle_*` the win-only code and saved ghosts.
+- **Unit tests:** `.venv/Scripts/python -m pytest -q team/dance/tests` (176, about a minute).
+- **Eval:** `.venv/Scripts/python -m team.dance.eval.run_eval --jobs 6` (46 scenarios, plus the duel; shared pose cache, every 3rd frame drawn). `real_*` use real-call timing and a caller who answers Brodie's actual lines (`--realistic --answer key:text`); `choose_*` cover the cards; `battle_*` the win-only code and saved ghosts.
 - **Live on Chrome:** `.\team\scripts\chrome.ps1 -Restart` (restart so the new code loads), then follow §3.

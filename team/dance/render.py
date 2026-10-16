@@ -622,11 +622,18 @@ def draw_overlays(img, fxq, t, size):
     return img
 
 
-def draw_chat(img, size, caption=None, hints=False, offer=False, t=0.0):
+def draw_chat(img, size, caption=None, hints=False, offer=False, t=0.0, typing=False):
     """Chat and the offer: Brodie's words in a speech bubble at the bottom (the site's coach-say: rounded, with the corner by the
-    tile pointing up), the two ways to begin before the caller has spoken, and a volt "say yes" pill while an offer is open."""
+    tile pointing up), the two ways to begin before the caller has spoken, and a volt "say yes" pill while an offer is open.
+    typing: his answer is on its way, so a typing bubble stands where his words will appear (in place of his last line)."""
     cw, ch = size; s0 = sc_of(size); sx, sy, sx1, sb = safe_box(size)
     w = sx1 - sx; px = int(28 * s0)
+    if typing:
+        from .avatar import typing_bubble
+        bw = int(116 * s0); y1 = sb - int(10 * s0) - (int(64 * s0) if offer else 0)
+        typing_bubble(img, sx1 - bw // 2, y1 - int(bw * 0.21), bw, t, alpha=0.86)
+        if offer: pill_c(img, 'Say "yes" or raise both hands', cw // 2, sb - int(36 * s0), int(24 * s0), INK, VOLT, font='body')
+        return img
     if caption:
         while px > int(19 * s0) and len(wrap(caption, px, w - int(48 * s0), max_lines=9)) > 3: px -= 2
         ls = wrap(caption, px, w - int(48 * s0), max_lines=3)
@@ -1346,7 +1353,7 @@ def compose_idle(frame_bgr, lm_img, title, lines=(), size=None, history=None, be
         draw_mode_cards(img, size, menu, t)
         if caption: draw_caption(img, caption, size, y_bottom=y1 - int(4 * s0))
     elif chat:
-        draw_chat(img, size, caption, hints, offer=state == 'OFFER', t=t)
+        draw_chat(img, size, caption, hints, offer=state == 'OFFER', t=t, typing=avatar_state == 'thinking')
     else:
         if in_setup: draw_setup_view(img, setup, size, state, t)
         elif recap: draw_recap(img, recap, size)

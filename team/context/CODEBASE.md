@@ -79,6 +79,7 @@ ivyhacks-brodie/
 │   ├── web/                  phone.html (browser caller), groove/index.html (landing page), certs/ (ignored)
 │   ├── scripts/              chrome.ps1, dance.ps1, dance_loop.ps1, chert.ps1 + shim, mint_link.py, serve_web.py, ...
 │   ├── promo/                8-day poster/reel kit (render.py, clips.py, art.py, days/*.html, STRATEGY.md, CAPTIONS.md)
+│   │                         + animate.py, anim/*.html: stickers, GIF/MP4 loops, missed-calls gag, stack diagram
 │   ├── video/                pitch video (make_pitch.py, music.py, voice.py, timeline.py) and film/ (Veo/Lyria film)
 │   ├── media/                README screenshots
 │   ├── skill/ tests/         legacy fitness-era handler and replay harness (section 8)
@@ -216,11 +217,11 @@ The whole call. Module layout, in file order:
 | 159–225 | tuning tables: setup caps, `WIN_TOTAL` (195/216/240 by difficulty), `MODES`, `PRIORITY`, `STYLE_*`, `PERSONA_PROMPTS` (hype/chill/coach), `RUNGS` (tempo ladder 0.5 → 0.6 → 0.75 → 0.9), `STATE_RULES` (the per-state note sent to Gemini), `LEVEL_CFG`, `CHOICES` |
 | 228–297 | helpers: `parse_code` (digits or number words; strict outside the menu), `parse_commands`, `pick_command`, `key_title` |
 | 300–363 | `class Backend` — HTTP via `urllib` (3 s, in an executor, never raises) or, with `BACKEND_URL=fake|off`, `team/backend/db.py` loaded by path and every route mapped in-process |
-| 366–452 | Gemini turn shaping and the starter patches: `stage_direction(prompt)`, `tune_realtime()` (en-US transcription, high VAD sensitivity, context compression), `patch_voice_layer()` (applied at import unless `DANCE_VOICE_PATCH=0`): `GeminiModel.build` wrapped, `GeminiModel.generate` replaced with `generate_reply(user_input=stage_direction(...))`, `GeminiModel.start` wrapped by `audio_in.wrap_start`, `Floor.gate_input` wrapped for the barge-in window and 600 ms of silence on a mid-word cut |
+| 366–452 | Gemini turn shaping and the starter patches: `stage_direction(prompt)`, `tune_realtime()` (en-US transcription, high VAD sensitivity, context compression), `patch_voice_layer()` (applied at import when `in_worker()`, i.e. `facetime.voice`/`facetime.worker` are already loaded or `__main__` has `CONSUMERS`; the simulator and tests skip it and never import livekit.agents or torch; off with `DANCE_VOICE_PATCH=0`): `GeminiModel.build` wrapped, `GeminiModel.generate` replaced with `generate_reply(user_input=stage_direction(...))`, `GeminiModel.start` wrapped by `audio_in.wrap_start`, `Floor.gate_input` wrapped for the barge-in window and 600 ms of silence on a mid-word cut |
 | 455–484 | `no_power_throttling()` (Windows EcoQoS opt-out), `on_event(event, say_now, ask_voice)` — the `--handlers` hook; stores the verbs in `STATE` and forwards every event to `STATE['session'].on_worker_event()` |
 | 487–3631 | `class DanceSession` (below) |
-| 3634–3667 | `dance_consumer(job)` builds a session from the `DANCE_*` env and awaits `run()`; `_register_consumer()` appends it to `CONSUMERS` on both `sys.modules['__main__']` and `facetime.worker` |
-| 3670–3845 | simulator fakes (`_FakePlayer`, `_FakeModel`, `_FakeVoice`, `_FakeJob`), `simulate(...)`, `main()` argparse |
+| 3634–3667 | `dance_consumer(job)` builds a session from the `DANCE_*` env and awaits `run()`; `_register_consumer()` appends it to `CONSUMERS` on both `sys.modules['__main__']` and `facetime.worker` (only `in_worker()`) |
+| 3730–3960 | simulator: `PoseCache` (MediaPipe's people per distinct frame, blake2b of the pose input; `DANCE_POSE_CACHE=<path>` shares it across runs, `off` disables it; in memory by default), fakes (`_FakePlayer`, `_FakeModel`, `_FakeVoice`, `_FakeJob`), `simulate(...)` (`DANCE_SIM_RENDER_EVERY=N` draws every Nth frame, its mp4 at fps/N), `main()` argparse |
 
 **States** (`self.state`, strings): `EXPLORE` (initial; `explore()` moves to CHOOSE at once), `CHOOSE` (six cards),
 `OFFER` (one suggestion, needs a yes), `PREPARE` (camera), `CONFIRM` (ready check), `ACTIVITY` (music), `REVIEW`
@@ -230,7 +231,8 @@ lines are dropped) and sends the new rules as a background note.
 **`DanceSession` methods by area:**
 - *Speech out:* `ask(prompt, key, ttl, urgent)` (the only path to Gemini's mouth), `say_line`, `pick` (variants, never the
   same twice), `context` (background note), `_speaker_loop` (one line at a time; waits for audio idle, model not thinking,
-  caller quiet 1 s and silent 6 s; skips if Gemini already asked the same; up to 25 s for the line to end), `say`/`sfx`/
+  caller quiet 1 s and silent 6 s after the caller's transcript, or 1 s once Gemini's answer to it has played (`coach_text_t` /
+  `model.last_coach_t` later than the transcript + 0.8 s); skips if Gemini already asked the same; up to 25 s for the line to end), `say`/`sfx`/
   `cut_audio`/`bank_say` (cue player), `wait_spoken`, `answer_after`, `wait_answer`, `wait_choice`, `wait_cmd`, `idle`.
 - *Transcript in:* `on_worker_event` (coach lines → caption, `false_progress` counter; caller lines → `addressed.score`,
   names, codes, `classify`, style/persona/difficulty words, `parse_commands` → `_cmd`), `check_unclear`/`ask_unclear`
@@ -384,8 +386,12 @@ for a wide source; `to_canvas` crops only what the aspect forces; `safe_box` kee
 Jakarta Sans from `assets/fonts` (Hershey fallback).
 **`fx.py`** (79) — `FxQueue` of timed effects (`judgment` 0.65 s, `tip`, `combo`, `confetti`, `levelup`, `achievement`,
 `grade_stamp`, `flash`, `ko`, `mvp`), easing helpers, analytic `confetti_particles`.
-**`avatar.py`** (240) — Brodie from kit art only (`brodie-sit-wave.png`, and `brodie-flex.png` for one mood). States: idle,
-listening (volt ring), speaking (mouth alternates 7 Hz), thinking (dots), offline (`sleepy`). **Moods** (`MOODS`, set by
+**`avatar.py`** (255) — Brodie from kit art only (`brodie-sit-wave.png`, and `brodie-flex.png` for one mood). States: idle,
+listening (volt ring), speaking (mouth alternates 7 Hz), thinking (`typing_bubble`: a dark pill with three hopping volt dots, under
+the PiP tile so the BRODIE lettering stays visible; `render.draw_chat(typing=True)` puts a bigger one where his words will appear),
+offline (`sleepy`). `live.avatar_state()` shows thinking from the end of a caller line said to Brodie (`reply_wait_t`), or one of
+our lines being placed, until his audio starts (`spoke_t`), at most `THINK_S` 6 s; also while Gemini runs a tool, and while a
+line of ours is queued. **Moods** (`MOODS`, set by
 `live.py`): `happy` (the sit-wave art: wink + grin), `pumped` (the kit's flex pose), `focus` (both eyes open, brow bars lowered
 toward the middle, closed smile), `encourage` (both eyes open, brow bars raised in the middle, closed smile). Feature edits stay
 inside the kit's locked traits: `_erase_stroke` paints canon cream over one ink stroke (the dark component nearest a measured
@@ -421,7 +427,7 @@ name hashed), `close`. The summary is POSTed to `/events` by `live.py`.
 
 ### 3.8 Tests, eval, offline tools
 
-**`tests/`** — 113 test functions, **171 collected cases** (`python -m pytest team/dance/tests -q`):
+**`tests/`** — 117 test functions, **176 collected cases** (`python -m pytest team/dance/tests -q`, about 1 minute):
 `test_scoring` (8: selftest, DTW identity, degradations, engine states, freestyle), `test_ingest` (2), `test_handedness` (2:
 mirror convention, cue names the caller's own side), `test_modules` (19: progression, choreo incl. no AIST library, feedback,
 gestures incl. phone hands-up, telemetry,
@@ -429,7 +435,8 @@ tracker, text/fx), `test_modules2` (10: cues, style vocab, ghost, addressed, ans
 screens; the `RoomOptions` swap survives `_ensure_options`), `test_orient` (5), `test_tracker` (5: crossings, re-ID, walk-ins, children, crowd), `test_phase1` (9: codes vs
 count-ins, squad ready window, space re-ask, hysteresis, dead air, ghost tokens, freed codes), `test_backend` (9: FastAPI
 `TestClient` on a temp DB: codes/duels, chains, classes, profiles, boards/funnel, forget me, metrics, the `/r/{code}` page with
-its preview tags and 1200×630 card, database-dependent HTTP health status), `test_live` (45 functions, 103 cases: kit compliance of every mood frame, moods from
+its preview tags and 1200×630 card, database-dependent HTTP health status), `test_live` (49 functions, 107 cases: the thinking state and typing bubble, lines released
+1 s after Gemini answered, the simulator pose cache, kit compliance of every mood frame (`check_cream` in-process), moods from
 verdicts / scores / coach style, the QR opening the result page, `classify` phrasings, flow, speaker queue, offers, space/ready waits, tools guarded, buttons, portrait
 canvas, cards, kit compliance, photo card + QR, modes, pose step, depth cues, layered cues, the lite-model swap closing the old
 landmarker on the pose thread).
@@ -438,8 +445,11 @@ landmarker on the pose thread).
 checks (`long_chat`, `choose_*`, `offer_needs_yes`, `learn_lobby`, `patient_*`, `space_*`, `real_*` with realistic timing,
 `menu_pick_*`, `telephone_*`, `class_*`, `battle_*`, `learn_pose_step`, `loop_weak_bar`, `garbled_answers`, `setup_*`,
 `desk_tracking`, `safety`, `pause_resume`, `forget`, `walk_in`, `squad`, `daily`). Writes `data/tmp/eval_report.json`,
-`data/tmp/cue_review.csv`, per-scenario logs and MP4s in `data/tmp/eval/`. Flags `--clip`, `--only`, `--jobs`, `--no-duel`.
-Run it alone; it does not finish beside a live worker on this laptop.
+`data/tmp/cue_review.csv`, per-scenario logs and MP4s in `data/tmp/eval/`. Flags `--clip`, `--only`, `--jobs`, `--no-duel`,
+`--render-every N` (default 3), `--no-pose-cache`. Speed (2026-10-15): the scenarios share `data/tmp/eval/pose_cache.pkl`
+(`live.PoseCache`), draw every 3rd frame, start longest-first (last report's `wall_s`), and the simulator no longer imports
+livekit.agents / torch; one `daily` run went from 350 s to 40 s with identical scores. Run it alone; it does not finish beside a
+live worker on this laptop.
 **`eval/snapshots.py`** (101) — renders all 20 HUD states to `data/tmp/hud/*.png` (`--landscape` variant) and times `compose`.
 **`offline_test.py`** (207) — `selftest` (14 checks incl. QR decode and compose time), `key --video --name --bpm`, `run
 --video --key --out` (annotated MP4 + JSON report), `landmarks`, `list`.
@@ -565,6 +575,17 @@ fonts, writes `config.js`, QR via `segno`, fills `CAPTIONS.md` → `data/tmp/pro
 `art.py` generates extra Brodie poses with Gemini and cream-checks them. `promo.js` + `brand.css` are the shared runtime and
 tokens. `STRATEGY.md` is the calendar (Day 0 teaser Sun 10/11 → Day 7 recap Sun 10/18) and audience notes; `CAPTIONS.md`
 the per-platform copy. Output: `data/tmp/promo/<day>/`.
+
+**Animated pieces** — `animate.py` drives headless Edge/Chrome over the DevTools protocol (`websockets` + `httpx`): for every
+frame it calls `window.seek(t)` (pauses every CSS animation at `t`, then the page's `onSeek(t)` for scripted state) and takes a
+screenshot, so timing is exact on any machine; ffmpeg writes MP4 (loop repeated to `min_mp4` s), a palette GIF and a still PNG;
+stickers are transparent and also get a 512 px animated WebP and a green-screen MP4. Pages in `anim/` (`anim.js` runtime,
+`anim.css`): `stickers.html` (7 x 2 s: perfect, miss, combo, srank, lockin, calling, chefskiss), `call.html` (incoming-call loop,
+9:16 + 4:5), `timeline.html` (an 8-count filling PERFECT/NICE/MISS with Brodie's moods and the grade card, 16:9 + 9:16),
+`missed.html` (the "missed calls from Brodie" lock-screen gag, 3 variants, 9:16 + 4:5), `stack.html` (the architecture, 16:9).
+Brodie is kit art only: `export_art()` copies the kit PNGs and `avatar.py`'s mood sprites to `data/tmp/promo/anim/art/` and runs
+`check_cream.py`. `[data-line]` shows `config.json`'s `call_line`, or the handle and hashtag while it is empty. Output:
+`data/tmp/promo/anim/<piece>/` + `sheet.jpg`. Software rendering of the 1080-wide pages is slow (minutes per piece).
 
 **Pitch video** (`team/video/`, 46 s of real footage): `scout.py` (contact sheets of eval captures) → `timeline.py` (the
 edit as data, 100 BPM) → `voice.py` (Gemini TTS Puck/Kore with transcription re-takes, via `facetime.cues_tts`) →
@@ -693,6 +714,7 @@ sets 1: the API refuses SQLite), `DANCE_LIBRARY_URL` (zip of the private keys, f
 | `CLASS_PHRASES`, `CLASS_DEMOS`, `CLASS_ATTEMPTS`, `CLASS_ROLE` | 2, 1, 2, unset | class mode |
 | `POSE_HOLD_S`, `POSE_EASE_S`, `POSE_SPEECH_EXTRA_S`, `FREEZE_MATCH_REST_S`, `DEMO_TO_ASK_S`, `TURN_GAP_S`, `MOVE_GAP_S`, `ROUND_GAP_S`, `LESSON_SOFT_CAP_S` | see `pacing.py` | teaching pace |
 | `DEBUG_MP4`, `SESSION_LOG`, `LOCAL_VOICE`, `UNLOCK_ALL`, `NO_THROTTLE` | unset, `data/tmp/dance_session_log.json`, 0, 0, 1 | developer switches |
+| `POSE_CACHE`, `SIM_RENDER_EVERY` | in memory, 1 (the eval: `data/tmp/eval/pose_cache.pkl`, 3) | simulator only: pose per distinct frame (a path shares it across runs, `off` = every frame through MediaPipe); draw every Nth frame |
 
 ---
 

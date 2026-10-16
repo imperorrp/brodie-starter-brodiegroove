@@ -17,6 +17,19 @@ PY = sys.executable
 OUT = os.path.join(ROOT, 'data', 'tmp', 'eval')
 DB = os.path.join(OUT, 'eval_team.db')
 FAST = dict(DANCE_MAX_PHRASES='1', DANCE_MAX_S='400')
+POSE_CACHE = os.path.join(OUT, 'pose_cache.pkl')        # MediaPipe's answer per distinct clip frame, shared by every scenario (live.PoseCache)
+SIM_ENV = {}                                             # set by main(): the render rate and the pose cache for every simulator run
+
+
+def _prev_wall():
+    try:
+        rep = json.load(open(os.path.join(ROOT, 'data', 'tmp', 'eval_report.json'), encoding='utf-8'))
+        return {r['name']: float(r.get('wall_s') or 0) for r in rep.get('scenarios', [])}
+    except Exception:
+        return {}
+
+
+PREV_WALL = _prev_wall()
 
 
 def fixtures():
@@ -156,7 +169,7 @@ def scenarios(clip, codes=None):
 def run_one(sc, clip, stage_env=None):
     os.makedirs(OUT, exist_ok=True)
     log = os.path.join(OUT, f"{sc['name']}.json")
-    env = dict(os.environ, BACKEND_URL='fake', TEAM_DB=DB, DANCE_SESSION_LOG=log, PYTHONUTF8='1', **sc.get('env', {}), **(stage_env or {}))
+    env = dict(os.environ, BACKEND_URL='fake', TEAM_DB=DB, DANCE_SESSION_LOG=log, PYTHONUTF8='1', **SIM_ENV, **sc.get('env', {}), **(stage_env or {}))
     t = time.time()
     gargs = sum((['--gesture', g] for g in sc.get('gestures', [])), [])
     p = subprocess.run([PY, '-m', 'team.dance.live'] + sc['args'] + gargs + ['--out', os.path.join(OUT, f"{sc['name']}.mp4")], cwd=ROOT, env=env,
@@ -314,12 +327,18 @@ def check(res, name):
 def main(argv=None):
     ap = argparse.ArgumentParser(); ap.add_argument('--clip', default=os.path.join('data', 'tmp', 'mac_handoff', 'segments', 'run3_jacks.mp4'))
     ap.add_argument('--only', default=''); ap.add_argument('--jobs', type=int, default=4); ap.add_argument('--no-duel', action='store_true')
+    ap.add_argument('--render-every', type=int, default=3, help='draw every Nth simulated frame (1 = every frame, as a live call)')
+    ap.add_argument('--no-pose-cache', action='store_true', help='run MediaPipe on every frame, sharing nothing between scenarios')
     a = ap.parse_args(argv)
     os.makedirs(OUT, exist_ok=True)
     if os.path.exists(DB) and not a.only: os.remove(DB)
+    SIM_ENV['DANCE_SIM_RENDER_EVERY'] = str(max(1, a.render_every))
+    SIM_ENV['DANCE_POSE_CACHE'] = 'off' if a.no_pose_cache else POSE_CACHE
     scs = scenarios(a.clip, fixtures())
     if a.only: scs = [s for s in scs if s['name'] in a.only.split(',')]
-    with ThreadPoolExecutor(max_workers=a.jobs) as ex: results = list(ex.map(lambda s: run_one(s, a.clip), scs))
+    with ThreadPoolExecutor(max_workers=a.jobs) as ex:                     # the longest scenarios (last run's wall time) start first
+        futs = {sc['name']: ex.submit(run_one, sc, a.clip) for sc in sorted(scs, key=lambda s: -PREV_WALL.get(s['name'], 1e9))}
+        results = [futs[sc['name']].result() for sc in scs]
     # the duel: a second caller says the battle's code
     if not a.no_duel and (not a.only or 'battle' in a.only.split(',')):
         code = next((e.get('code') for r in results if r['name'] == 'battle' and r.get('log') for e in r['log'].get('log', []) if e.get('event') == 'result_posted'), None)

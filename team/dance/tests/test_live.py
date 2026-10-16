@@ -125,6 +125,62 @@ def test_caller_speech_holds_system_lines():
     assert [e for e in log if 'ask' in e and 'setup line' in e['ask']]
 
 
+def test_answered_caller_releases_lines_after_a_second():
+    """Once Gemini's answer to the caller has played, our next line waits 1 s, not the full 6 s (the awkward pause)."""
+    s, clock, log = _session()
+    clock['t'] = 11.0; s.last_caller_text_t = 9.0; s.coach_text_t = 10.5        # Gemini answered at 10.5
+    async def go():
+        s.say_line('setup line', key='setup')
+        for _ in range(20): await asyncio.sleep(0)
+    asyncio.run(go())
+    assert [e for e in log if 'ask' in e and 'setup line' in e['ask']]
+
+
+def test_thinking_from_the_callers_line_until_his_audio():
+    s, clock, log = _session()
+    assert s.avatar_state(False) == 'idle'
+    clock['t'] = 5.0; s.on_worker_event(dict(type='voice', role='caller', text='teach me hip hop'))
+    assert s.reply_wait_t == 5.0
+    clock['t'] = 5.2; assert s.avatar_state(False) == 'thinking'                 # the caller is done: no blank "listening" gap
+    clock['t'] = 7.5; assert s.avatar_state(False) == 'thinking'
+    clock['t'] = 8.0; assert s.avatar_state(True) == 'speaking'                  # his audio started
+    clock['t'] = 8.5; assert s.avatar_state(False) in ('idle', 'thinking') and not s.thinking(8.5)
+    clock['t'] = 20.0; s.reply_wait_t = 20.0; s.say_q = []
+    clock['t'] = 26.5; assert not s.thinking(26.5)                              # a reply that never comes: the dots stop after THINK_S
+
+
+def test_typing_bubble_drawn_while_thinking():
+    from team.dance import render as R
+    frame = np.full((1280, 720, 3), 90, np.uint8); size = R.canvas_size(720, 1280)
+    idle = R.compose_idle(frame, None, 'Brodie', size=size, caption='Want to start?', state='EXPLORE', avatar_state='idle', t=0.3)
+    think = R.compose_idle(frame, None, 'Brodie', size=size, caption='Want to start?', state='EXPLORE', avatar_state='thinking', t=0.3)
+    assert think.shape == idle.shape and (think != idle).any()
+    land = R.compose_idle(np.full((720, 1280, 3), 90, np.uint8), None, 'Brodie', size=R.canvas_size(1280, 720), state='REVIEW', avatar_state='thinking', t=0.1)
+    assert land.shape[:2] == (720, 1280)
+
+
+def test_pose_cache_memo_and_disk(tmp_path, monkeypatch):
+    """The simulator asks MediaPipe once per distinct frame; the memo is shared across runs through a file."""
+    from team.dance import multipose
+    calls = []
+    class FakePose:
+        def __init__(self, *a, **k): pass
+        def __call__(self, rgb, ms): calls.append(ms); return [(np.full((33, 5), 0.5, np.float32), np.zeros((33, 3), np.float32))]
+        def close(self): pass
+    monkeypatch.setattr(multipose, 'MultiPose', FakePose)
+    path = str(tmp_path / 'pc.pkl')
+    s, clock, log = _session(); s.pose_cache = live.PoseCache(path, tag='lite')
+    a = np.zeros((48, 64, 3), np.uint8); b = a.copy(); b[0, 0] = 9
+    for i in range(5): s._pose_sync(a, i * 70)
+    s._pose_sync(b, 400)
+    assert len(calls) == 2 and s.pose_cache.hits == 4 and s.pose_cache.misses == 2
+    got = s.pose_cache.get(a); got[0][0][:] = 0                                 # callers get copies: the memo stays intact
+    assert s.pose_cache.get(a)[0][0][0, 0] == 0.5
+    s.pose_cache.save()
+    pc2 = live.PoseCache(path, tag='lite'); assert pc2.get(a) is not None and pc2.get(b) is not None
+    assert live.PoseCache(path, tag='full').get(a) is None                       # another model never reuses these
+
+
 def test_no_meta_prompts_in_flow_code():
     src = open(live.__file__, encoding='utf-8').read()
     body = src[src.index('class DanceSession'):src.index('# ---- worker registration ----')]   # every mode, telephone and class included
@@ -261,15 +317,17 @@ def test_buttons_are_state_gated():
 
 
 def test_avatar_is_kit_compliant():
-    import subprocess, tempfile, cv2
+    import importlib, tempfile, cv2
     from team.dance import avatar as A
     tools = os.path.join(ROOT, 'team', 'dance', 'assets', 'brodie', 'tools')
-    paths = []
+    if tools not in sys.path: sys.path.insert(0, tools)
+    cc = importlib.import_module('check_cream')                              # the kit's checker, in-process (a second Python cost ~10 s)
     names = ['grin', 'closed', 'sleepy'] + [A.variant_for(m, mo) for m in A.MOODS if m != 'happy' for mo in ('grin', 'closed')]
     for v in names:                                                          # every mood frame stays canon cream
-        p = os.path.join(tempfile.gettempdir(), f'brodie_{v}.png'); cv2.imwrite(p, A.sprite(v, 600)); paths.append(p)
-    r = subprocess.run([sys.executable, 'check_cream.py'] + paths, cwd=tools, capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
+        p = os.path.join(tempfile.gettempdir(), f'brodie_{v}.png'); cv2.imwrite(p, A.sprite(v, 600))
+        fill, _ = cc.measure(p)
+        assert fill is not None, f'{v}: no cream body found'
+        assert not cc.verdict(fill)[1], (v, cc.verdict(fill))
     img = np.zeros((300, 300, 3), np.uint8)
     for st in A.BrodieAvatar.STATES:
         for m in A.MOODS: A.avatar().draw(img, 150, 150, 200, st, 0.3, mood=m)
