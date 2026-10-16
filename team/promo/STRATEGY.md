@@ -21,6 +21,24 @@ Every CTA band then switches from "THE LINE OPENS MON 10.12" to "FACETIME BRODIE
 **Before Day 7:** put the real numbers in `config.json` under `recap`. The poster shows "—" until you do.
 **Edit any copy:** it's plain HTML in `days/`. Open the file in a browser after one `render` run (that writes `config.js` and `fonts.css`).
 
+## Animated pieces (stickers, GIFs, loops)
+
+```bash
+python -m team.promo.animate                       # everything (slow: software rendering, ~15-20 min) -> data/tmp/promo/anim/
+python -m team.promo.animate stickers --only miss  # one piece / one variant;  --fps 24 to go faster
+```
+
+| Piece | Files | Use it for |
+|---|---|---|
+| `stickers/` perfect, miss, combo, srank, lockin, calling, chefskiss | transparent `.gif` (480), `.webp` (512, animated), `_green.mp4`, `.png` | comment replies, IG Story stickers, Slack/Discord, green-screen overlays in CapCut on real call clips |
+| `call/` 9:16 + 4:5 | `.mp4` (8 s), `.gif`, `.png` | Story / Reel cover, ad creative, pinned post: the scroll-stopping incoming call |
+| `timeline/` 16:9 + 9:16 | `.mp4` (14 s), `.gif`, `.png` | "how scoring works" on X / LinkedIn, Day 3-style posts, the site |
+| `missed/` 1, 2, 3 x 9:16 + 4:5 | `.mp4` (8 s), `.gif`, `.png` (last frame) | the running gag (Brodie as the clingy coach): one per day (the lock screens are dated Fri 10/16, Sat 10/17, Sun 10/18), memes |
+| `stack/` 16:9 | `.mp4` (16 s), `.gif`, `.png` | builder posts on X / LinkedIn: what happens when you call Brodie |
+
+The missed-calls gag is a joke, not a feature (Brodie doesn't send notifications); keep the "POV" / "me after" framing.
+The bottom line shows `call_line` once it is set in `config.json`; until then it shows the handle and hashtag.
+
 ## Who we're talking to
 
 | Segment | What hooks them | Where |

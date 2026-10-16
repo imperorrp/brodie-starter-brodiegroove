@@ -1,0 +1,144 @@
+<!doctype html>
+<!-- Sticker / reaction-GIF pack: one 2 s loop per ?v= (perfect miss combo srank lockin calling chefskiss), transparent when
+     rendered with ?alpha=1 (python -m team.promo.animate stickers). Brodie is kit art and avatar.py's moods only. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css"><link rel="stylesheet" href="anim.css">
+<style>
+  .st { position: absolute; inset: 0; }
+  .st img { position: absolute; }
+  .center { left: 0; right: 0; text-align: center; position: absolute; }
+
+  /* PERFECT: the kit flex pose bouncing on a spinning volt burst */
+  [data-v~=perfect] .bw { left: 14%; top: 6%; width: 72%; height: 72%; animation: spin30 2s linear infinite; }
+  [data-v~=perfect] img { left: 19%; top: 6%; width: 62%; animation: bounce 1s ease-in-out infinite; transform-origin: 50% 100%; }
+  [data-v~=perfect] .word { bottom: 7%; font-size: calc(var(--u) * 14.5); rotate: -4deg; animation: pop 1s ease-out infinite; }
+
+  /* MISS: a red stamp slams in, Brodie's "you've got this" face, "hug the beat." */
+  /* the mood busts are crops, so they sit in a call-style bubble (as on the call) instead of showing a straight cut edge */
+  .bub { position: absolute; left: 21%; top: 4%; width: 58%; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: var(--ink3);
+    border: calc(var(--u) * 2) solid var(--c, var(--volt)); box-shadow: 0 0 0 calc(var(--u) * 1.2) var(--ink); }
+  .st .bub img { position: absolute; left: 15%; top: 9%; width: 70%; }
+  [data-v~=miss] .bub { --c: var(--red); animation: wobble 2s ease-in-out infinite; }
+  [data-v~=miss] .word { top: 50%; font-size: calc(var(--u) * 24); animation: stamp 2s ease-out infinite; }
+  [data-v~=miss] .tag { position: absolute; left: 50%; bottom: 6%; translate: -50% 0; animation: tagin 2s ease-out infinite; }
+  .tag { font: 700 calc(var(--u) * 7) var(--grotesk); background: var(--paper); color: var(--ink); padding: calc(var(--u) * 1.2) calc(var(--u) * 3.4);
+    border-radius: 999px; border: calc(var(--u) * .8) solid var(--ink); white-space: nowrap; letter-spacing: .01em; }
+  @keyframes stamp { 0% { scale: 2.6; rotate: -16deg; opacity: 0; } 10% { scale: .92; rotate: -8deg; opacity: 1; } 15% { scale: 1.06; } 20% { scale: 1; rotate: -8deg; }
+    22% { translate: calc(var(--u) * -1.5) 0; } 25% { translate: calc(var(--u) * 1.5) 0; } 28%, 88% { translate: 0 0; opacity: 1; scale: 1; rotate: -8deg; } 100% { opacity: 0; scale: 1; rotate: -8deg; } }
+  @keyframes wobble { 0%, 100% { rotate: 0deg; } 12% { rotate: -5deg; } 20% { rotate: 4deg; } 28% { rotate: -2deg; } 36% { rotate: 0deg; } }
+  @keyframes tagin { 0%, 22% { opacity: 0; translate: -50% calc(var(--u) * 4); } 32%, 88% { opacity: 1; translate: -50% 0; } 100% { opacity: 0; translate: -50% 0; } }
+
+  /* COMBO: a counter ticking up with speed streaks */
+  [data-v~=combo] .num { top: 18%; font-size: calc(var(--u) * 36); animation: pop .5s ease-out infinite; }
+  [data-v~=combo] .num .x { font-size: .55em; vertical-align: .38em; margin-right: .04em; }
+  [data-v~=combo] .lbl { position: absolute; left: 50%; top: 61%; translate: -50% 0; rotate: -3deg; font-size: calc(var(--u) * 9); }
+  .pillw { font-family: var(--display); background: var(--pink); color: var(--ink); padding: calc(var(--u) * 1.4) calc(var(--u) * 4.4); border-radius: 999px;
+    border: calc(var(--u) * .9) solid var(--ink); letter-spacing: .04em; white-space: nowrap; }
+  .streak { position: absolute; height: calc(var(--u) * 2.2); border-radius: 999px; background: var(--volt); border: calc(var(--u) * .6) solid var(--ink);
+    animation: streak .5s linear infinite; }
+  @keyframes streak { 0% { translate: calc(var(--u) * 22) 0; opacity: 0; } 20% { opacity: 1; } 100% { translate: calc(var(--u) * -30) 0; opacity: 0; } }
+
+  /* S-RANK: a badge with a shine, the grade title on a ribbon */
+  [data-v~=srank] .bw { left: 12%; top: 4%; width: 76%; height: 76%; animation: spin30 2s linear infinite; }
+  [data-v~=srank] .badge { position: absolute; left: 24%; top: 16%; width: 52%; height: 52%; border-radius: 50%; background: var(--ink);
+    border: calc(var(--u) * 1.6) solid var(--paper); box-shadow: 0 0 0 calc(var(--u) * 1) var(--ink); display: grid; place-items: center; overflow: hidden; }
+  [data-v~=srank] .badge .s { font: calc(var(--u) * 38) / 1 var(--display); color: var(--volt); translate: 0 calc(var(--u) * 1.5); animation: pop 1s ease-out infinite; }
+  [data-v~=srank] .badge .shine { position: absolute; inset: -20%; background: linear-gradient(105deg, transparent 42%, rgba(255,255,255,.75) 50%, transparent 58%);
+    animation: shine 2s ease-in-out infinite; }
+  @keyframes shine { 0%, 30% { translate: -80% 0; } 70%, 100% { translate: 80% 0; } }
+  [data-v~=srank] .rib { position: absolute; left: 50%; bottom: 13%; translate: -50% 0; rotate: -4deg; font-size: calc(var(--u) * 7.4); }
+  [data-v~=srank] .rib.pillw { animation: pop 1s ease-out infinite; animation-delay: -.5s; }
+
+  /* LOCK IN.: brackets close in on Brodie's focus face */
+  [data-v~=lockin] .bub { top: 7%; }
+  [data-v~=lockin] .br { position: absolute; width: 16%; height: 16%; border: 0 solid var(--cyan); animation: lock 2s cubic-bezier(.2,.8,.2,1) infinite; }
+  [data-v~=lockin] .br::after { content: ''; position: absolute; inset: calc(var(--u) * -1.2); border: inherit; border-color: var(--ink); z-index: -1; }
+  .br.tl { left: var(--o); top: var(--o); border-width: calc(var(--u) * 2) 0 0 calc(var(--u) * 2); }
+  .br.tr { right: var(--o); top: var(--o); border-width: calc(var(--u) * 2) calc(var(--u) * 2) 0 0; }
+  .br.bl { left: var(--o); bottom: calc(var(--o) + 16%); border-width: 0 0 calc(var(--u) * 2) calc(var(--u) * 2); }
+  .br.brr { right: var(--o); bottom: calc(var(--o) + 16%); border-width: 0 calc(var(--u) * 2) calc(var(--u) * 2) 0; }
+  @property --o { syntax: '<percentage>'; inherits: false; initial-value: 4%; }
+  @keyframes lock { 0% { --o: -6%; opacity: 0; } 12% { opacity: 1; } 34% { --o: 14%; } 40%, 46% { --o: 12%; border-color: var(--volt); } 52%, 92% { --o: 12%; border-color: var(--cyan); opacity: 1; } 100% { --o: 12%; opacity: 0; } }
+  [data-v~=lockin] .word { bottom: 7%; font-size: calc(var(--u) * 15); animation: lockword 2s ease-out infinite; }
+  @keyframes lockword { 0%, 34% { scale: 0; } 42% { scale: 1.15; } 50%, 100% { scale: 1; } }
+
+  /* CALLING: the ringing incoming-call bubble */
+  [data-v~=calling] .call { position: absolute; left: 25%; top: 7%; width: 50%; height: 50%; }
+  [data-v~=calling] .rip { position: absolute; inset: 0; border-radius: 50%; border: calc(var(--u) * 1.6) solid var(--volt); animation: ripple 2s ease-out infinite; }
+  [data-v~=calling] .face { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; border: calc(var(--u) * 2) solid var(--volt);
+    box-shadow: 0 0 0 calc(var(--u) * 1.2) var(--ink); animation: ring 1s ease-in-out infinite; background: #1c1c1c; }
+  [data-v~=calling] .face img { position: static; width: 100%; height: 100%; object-fit: cover; }
+  [data-v~=calling] .who { top: 61%; font-size: calc(var(--u) * 15); }
+  [data-v~=calling] .sub { position: absolute; left: 0; right: 0; top: 77%; text-align: center; }
+  [data-v~=calling] .sub .pillw { display: inline-block; background: var(--volt); font-size: calc(var(--u) * 6.4); animation: pop 1s ease-out infinite; }
+  .dots i { display: inline-block; animation: dot 1s steps(1) infinite; }
+  .dots i:nth-child(2) { animation-delay: .25s; } .dots i:nth-child(3) { animation-delay: .5s; }
+  @keyframes dot { 0%, 24% { opacity: 0; } 25%, 100% { opacity: 1; } }
+
+  /* CHEF'S KISS.: the original wink + grin */
+  [data-v~=chefskiss] img { left: 27%; top: 3%; width: 46%; animation: rock 2s ease-in-out infinite; transform-origin: 50% 95%; }
+  @keyframes rock { 0%, 100% { rotate: -3deg; } 50% { rotate: 3deg; } }
+  [data-v~=chefskiss] .word { bottom: 8%; font-size: calc(var(--u) * 10.5); rotate: -5deg; animation: pop 1s ease-out infinite; }
+  [data-v~=chefskiss] .spark { color: var(--pink); }
+</style></head>
+<body><div class="poster">
+
+  <div class="st" data-v="perfect">
+    <div class="bw cut"><div class="burst" data-burst="14"></div></div>
+    <img class="cut" src="../../../data/tmp/promo/anim/art/brodie-flex.png">
+    <div class="word v center cut">PERFECT</div>
+    <i class="spark" style="left:6%;top:10%"></i><i class="spark" style="right:7%;top:22%;animation-delay:-.4s"></i>
+    <i class="spark" style="left:10%;top:52%;animation-delay:-.7s;color:var(--pink)"></i><i class="spark" style="right:9%;top:58%;animation-delay:-.2s;color:var(--cyan)"></i>
+  </div>
+
+  <div class="st" data-v="miss">
+    <div class="bub"><img src="../../../data/tmp/promo/anim/art/mood_encourage_closed.png"></div>
+    <div class="word rd center cut">MISS</div>
+    <div class="tag">hug the beat.</div>
+  </div>
+
+  <div class="st" data-v="combo">
+    <i class="streak" style="left:4%;top:24%;width:20%"></i><i class="streak" style="right:2%;top:36%;width:16%;animation-delay:-.2s"></i>
+    <i class="streak" style="left:8%;top:52%;width:14%;animation-delay:-.35s;background:var(--pink)"></i><i class="streak" style="right:6%;top:14%;width:12%;animation-delay:-.1s;background:var(--cyan)"></i>
+    <div class="word v center cut num"><span class="x">×</span><span id="n">21</span></div>
+    <div class="lbl pillw cut">COMBO</div>
+  </div>
+
+  <div class="st" data-v="srank">
+    <div class="bw cut"><div class="burst" data-burst="16"></div></div>
+    <div class="badge"><span class="s">S</span><i class="shine"></i></div>
+    <div class="rib pillw cut">BEAT ASSASSIN</div>
+    <i class="spark" style="left:5%;top:8%;color:var(--pink)"></i><i class="spark" style="right:4%;top:44%;animation-delay:-.5s;color:var(--cyan)"></i>
+  </div>
+
+  <div class="st" data-v="lockin">
+    <div class="bub" style="--c:var(--cyan)"><img src="../../../data/tmp/promo/anim/art/mood_focus_closed.png"></div>
+    <i class="br tl"></i><i class="br tr"></i><i class="br bl"></i><i class="br brr"></i>
+    <div class="word v center cut">LOCK IN.</div>
+  </div>
+
+  <div class="st" data-v="calling">
+    <div class="call"><i class="rip"></i><i class="rip" style="animation-delay:-.66s"></i><i class="rip" style="animation-delay:-1.33s"></i>
+      <div class="face"><img src="../../../data/tmp/promo/anim/art/brodie-pfp-square.png"></div></div>
+    <div class="word center cut who" style="color:var(--paper)">BRODIE</div>
+    <div class="sub"><span class="pillw cut">IS CALLING<span class="dots"><i>.</i><i>.</i><i>.</i></span></span></div>
+  </div>
+
+  <div class="st" data-v="chefskiss">
+    <img class="cut" src="../../../data/tmp/promo/anim/art/brodie-sit-wave.png">
+    <div class="word pk center cut">CHEF'S KISS.</div>
+    <i class="spark" style="right:14%;top:12%"></i><i class="spark" style="right:6%;top:30%;animation-delay:-.33s"></i>
+    <i class="spark" style="left:10%;top:20%;animation-delay:-.66s"></i>
+  </div>
+
+</div>
+<script>
+  // a starburst (polygon) for [data-burst=N points]: hard edges, so the 1-bit GIF stays clean
+  document.querySelectorAll('[data-burst]').forEach(el => {
+    const n = +el.dataset.burst, pts = [];
+    for (let i = 0; i < n * 2; i++) { const r = i % 2 ? 37 : 50, a = Math.PI * i / n; pts.push(`${50 + r * Math.sin(a)}% ${50 - r * Math.cos(a)}%`); }
+    el.style.clipPath = `polygon(${pts.join(',')})`;
+  });
+  window.onSeek = t => { const n = document.getElementById('n'); if (n) n.textContent = 18 + Math.floor((t % 2) * 2); };
+</script>
+<script src="../config.js"></script><script src="anim.js"></script>
+</body></html>

@@ -1,0 +1,27 @@
+/* Shared bits for the animated pieces (on top of ../brand.css). html.alpha = rendered with a transparent background. */
+html.alpha, html.alpha body { background: transparent; }
+html.alpha .poster::before, html.alpha .poster::after { display: none; }
+/* the static background as one pre-rendered plate (anim.js ?plate / ?flat) */
+html.plate .poster > :not(.bg) { visibility: hidden; }
+html.flat .poster > .bg, html.flat .poster::before, html.flat .poster::after { display: none; }
+.plateimg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -3; }
+
+/* die-cut outline for type and art on a transparent sticker: paper border plus a hard ink drop (no soft shadow, so GIF's
+   1-bit transparency stays clean) */
+.cut { filter: drop-shadow(calc(var(--u) * .9) 0 0 var(--paper)) drop-shadow(calc(var(--u) * -.9) 0 0 var(--paper))
+  drop-shadow(0 calc(var(--u) * .9) 0 var(--paper)) drop-shadow(0 calc(var(--u) * -.9) 0 var(--paper)) drop-shadow(0 calc(var(--u) * 1.3) 0 var(--ink)); }
+/* chunky sticker type: fill colour from .v/.pk/.rd..., a thick ink stroke under the fill */
+.word { font-family: var(--display); font-weight: normal; text-transform: uppercase; letter-spacing: -.02em; line-height: .9; white-space: nowrap;
+  -webkit-text-stroke: calc(var(--u) * 2.2) var(--ink); paint-order: stroke fill; }
+.bw { position: absolute; }
+.burst { position: absolute; inset: 0; background: var(--volt); }
+.spark { position: absolute; font-size: calc(var(--u) * 10); line-height: 1; color: var(--volt); animation: twinkle 1s ease-in-out infinite; }
+.spark::before { content: '✦'; }
+
+@keyframes twinkle { 0%, 100% { transform: scale(0) rotate(0); } 35% { transform: scale(1) rotate(45deg); } 70% { transform: scale(0) rotate(90deg); } }
+@keyframes bounce { 0%, 100% { transform: translateY(0) scale(1, 1); } 12% { transform: translateY(0) scale(1.05, .94); }
+  40% { transform: translateY(calc(var(--u) * -4.5)) scale(.98, 1.03); } 70% { transform: translateY(0) scale(1.02, .98); } }
+@keyframes pop { 0%, 100% { scale: 1; } 10% { scale: 1.16; } 24% { scale: .96; } 36% { scale: 1; } }
+@keyframes spin30 { to { rotate: 30deg; } }
+@keyframes ripple { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes ring { 0%, 36%, 100% { rotate: 0deg; } 4% { rotate: -9deg; } 10% { rotate: 9deg; } 16% { rotate: -7deg; } 22% { rotate: 6deg; } 28% { rotate: -3deg; } }

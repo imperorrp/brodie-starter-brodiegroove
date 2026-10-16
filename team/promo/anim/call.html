@@ -1,0 +1,73 @@
+<!doctype html>
+<!-- The incoming-call loop (4 s): Brodie ringing, stat chips floating, the Dance button begging to be pressed. 9:16 for
+     Stories/Reels/TikTok (kept inside the UI safe area), 4:5 for the feed. The bottom line is config.json's call_line, or the
+     handle while that is empty. python -m team.promo.animate call -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css"><link rel="stylesheet" href="anim.css">
+<style>
+  .poster { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6cqh 6cqw 7cqh; }
+  .callwrap { position: relative; width: calc(var(--u) * 46); aspect-ratio: 1; margin-top: calc(var(--u) * 6); flex: none; }
+  .rip { position: absolute; inset: 0; border-radius: 50%; border: calc(var(--u) * .5) solid var(--volt); animation: ripple 2s ease-out infinite; }
+  .face { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; border: calc(var(--u) * 1.1) solid var(--volt); background: #1c1c1c;
+    box-shadow: 0 0 calc(var(--u) * 10) rgba(217,255,61,.35); animation: ring 1s ease-in-out infinite; }
+  .face img { width: 100%; height: 100%; object-fit: cover; }
+  .callwrap .chip { position: absolute; font-size: calc(var(--u) * 3); animation: bob 2s ease-in-out infinite; z-index: 2; }
+  /* chips sit on the ring and the tank, never on his face */
+  .c1 { left: -44%; top: 4%; } .c2 { right: -46%; top: 76%; animation-delay: -.7s !important; } .c3 { left: -42%; top: 46%; animation-delay: -1.3s !important; }
+  @keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 calc(var(--u) * -1.8); } }
+  .name { font-size: calc(var(--u) * 13); margin-top: calc(var(--u) * 7); }
+  .sub { font: 500 calc(var(--u) * 3.4) var(--grotesk); color: var(--mut); margin-top: calc(var(--u) * 1.4); }
+  .dots i { font-style: normal; animation: dot 1s steps(1) infinite; }
+  .dots i:nth-child(2) { animation-delay: .25s; } .dots i:nth-child(3) { animation-delay: .5s; }
+  @keyframes dot { 0%, 24% { opacity: 0; } 25%, 100% { opacity: 1; } }
+  .btns { display: flex; gap: calc(var(--u) * 22); margin-top: calc(var(--u) * 9); }
+  .b { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 1.6); font: 600 calc(var(--u) * 2.8) var(--grotesk); color: var(--paper); }
+  .b i { position: relative; width: calc(var(--u) * 15); height: calc(var(--u) * 15); border-radius: 50%; display: grid; place-items: center; }
+  .b svg { width: 46%; fill: currentColor; }
+  .dec i { background: var(--red); color: var(--paper); }
+  .dec i svg { rotate: 135deg; }
+  .acc i { background: var(--volt); color: var(--ink); animation: beg 1s ease-in-out infinite; box-shadow: 0 0 calc(var(--u) * 6) rgba(217,255,61,.6); }
+  .acc i::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: calc(var(--u) * .6) solid var(--volt); animation: ripple 1s ease-out infinite; }
+  @keyframes beg { 0%, 100% { scale: 1; rotate: 0deg; } 15% { scale: 1.1; rotate: -10deg; } 30% { scale: 1.1; rotate: 10deg; } 45% { scale: 1.05; rotate: -6deg; } 60% { scale: 1; rotate: 0deg; } }
+  .dec span { color: var(--mut); }
+  .acc span { color: var(--volt); font-weight: 700; }
+  .line { margin-top: calc(var(--u) * 6); font: calc(var(--u) * 4) var(--display); letter-spacing: -.01em; color: var(--paper); }
+  .marquee { bottom: 3.5cqh; }
+  .marquee .track { display: inline-flex; animation: slide 4s linear infinite; }
+  @keyframes slide { to { translate: -50% 0; } }
+
+  .s9x16 .callwrap { width: calc(var(--u) * 42); margin-top: calc(var(--u) * 13); }
+  .s9x16 .name { font-size: calc(var(--u) * 13); margin-top: calc(var(--u) * 6); }
+  .s9x16 .btns { margin-top: calc(var(--u) * 6); }
+  .s9x16 .line { margin-top: calc(var(--u) * 4.5); }
+  .s9x16 .marquee { bottom: 15cqh; }
+  .s4x5 .callwrap { margin-top: calc(var(--u) * 8); width: calc(var(--u) * 36); }
+  .s4x5 .name { margin-top: calc(var(--u) * 5); }
+  .s4x5 .btns { margin-top: calc(var(--u) * 6); }
+  .s4x5 .line { margin-top: calc(var(--u) * 4); margin-bottom: calc(var(--u) * 7); }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <div class="kicker"><span>LIVE</span>A dance coach you FaceTime</div>
+
+  <div class="callwrap"><i class="rip"></i><i class="rip" style="animation-delay:-.66s"></i><i class="rip" style="animation-delay:-1.33s"></i>
+    <div class="face"><img src="../../../data/tmp/promo/anim/art/brodie-pfp-square.png"></div>
+    <div class="chip c1"><i class="dot" style="background:var(--volt)"></i>PERFECT <span class="big v">×21</span></div>
+    <div class="chip c2"><i class="dot" style="background:var(--cyan)"></i>GHOST · ONE BEAT AHEAD</div>
+    <div class="chip c3"><span class="big pk">S</span>BEAT ASSASSIN</div>
+  </div>
+
+  <div class="display name">BRODIE</div>
+  <div class="sub">FaceTime Video<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
+
+  <div class="btns">
+    <div class="b dec"><i><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></i><span>Not today</span></div>
+    <div class="b acc"><i><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></i><span>DANCE</span></div>
+  </div>
+  <div class="line" data-line="FaceTime">@brodiegroove · #BeatMyBrodie</div>
+
+  <div class="marquee pink"><div class="track">
+    <span>HIP-HOP</span><span>K-POP</span><span>HOUSE</span><span>WAACK</span><span>KRUMP</span><span>LOCK</span>
+    <span>HIP-HOP</span><span>K-POP</span><span>HOUSE</span><span>WAACK</span><span>KRUMP</span><span>LOCK</span></div></div>
+</div>
+<script src="../config.js"></script><script src="anim.js"></script>
+</body></html>

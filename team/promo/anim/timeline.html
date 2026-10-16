@@ -1,0 +1,100 @@
+<!doctype html>
+<!-- The count timeline (7.2 s loop): one 8-count at 100 BPM fills tile by tile with PERFECT / NICE / MISS, the combo climbs
+     and breaks, Brodie's mood follows (avatar.py's sprites), then the grade card. Everything that depends on the beat is set
+     in onSeek(t) from the time alone, so frames are exact. python -m team.promo.animate timeline -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../brand.css"><link rel="stylesheet" href="anim.css">
+<style>
+  .poster { display: grid; grid-template-columns: 1fr 1.25fr; grid-template-rows: auto 1fr auto; column-gap: 5cqw; padding: 7cqh 6cqw 8cqh; }
+  .head { grid-column: 1 / -1; display: flex; align-items: flex-end; justify-content: space-between; }
+  .title { font-size: calc(var(--u) * 10); }
+  .bpm { display: inline-flex; align-items: center; gap: calc(var(--u) * 1.2); font: 700 calc(var(--u) * 2.8) var(--grotesk); letter-spacing: .12em; color: var(--mut); }
+  .bpm i { width: calc(var(--u) * 2); height: calc(var(--u) * 2); border-radius: 50%; background: var(--volt); }
+  .stage { position: relative; display: grid; place-items: center; }
+  .av { position: relative; width: calc(var(--u) * 40); aspect-ratio: 1; border-radius: 50%; background: var(--ink3); border: calc(var(--u) * 1.1) solid var(--volt);
+    overflow: hidden; box-shadow: 0 0 calc(var(--u) * 9) rgba(217,255,61,.3); }
+  .av img { position: absolute; left: 15%; top: 9%; width: 70%; display: none; }
+  .av img.on { display: block; }
+  .av img.flex { left: 3%; top: 6%; width: 94%; }
+  .verdict { position: absolute; left: 0; right: 0; top: 66%; text-align: center; font-size: calc(var(--u) * 9.5); }
+  .combo { position: absolute; right: 2%; top: 6%; font-size: calc(var(--u) * 3); }
+  .right { display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 4); }
+  .lede { font-size: calc(var(--u) * 3.2); }
+  .strip { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); gap: calc(var(--u) * 1.2); }
+  .tile { aspect-ratio: .78; border-radius: calc(var(--u) * 1.6); border: calc(var(--u) * .35) solid var(--line); background: rgba(255,255,255,.04);
+    display: grid; place-items: center; font: calc(var(--u) * 5) var(--display); color: var(--mut); }
+  .tile.p { background: var(--volt); border-color: var(--volt); color: var(--ink); box-shadow: 0 0 calc(var(--u) * 4) rgba(217,255,61,.45); }
+  .tile.n { background: var(--cyan); border-color: var(--cyan); color: var(--ink); }
+  .tile.m { background: var(--red); border-color: var(--red); color: var(--ink); }
+  .head-line { position: absolute; top: -8%; bottom: -8%; width: calc(var(--u) * .5); background: var(--paper); border-radius: 9px; box-shadow: 0 0 calc(var(--u) * 2) var(--paper); }
+  .legend { display: flex; gap: calc(var(--u) * 3); font: 700 calc(var(--u) * 2.3) var(--grotesk); letter-spacing: .14em; }
+  .legend span { display: inline-flex; align-items: center; gap: calc(var(--u) * 1); }
+  .legend span::before { content: ''; width: calc(var(--u) * 1.8); height: calc(var(--u) * 1.8); border-radius: 4px; background: currentColor; }
+  .card { display: flex; align-items: center; gap: calc(var(--u) * 3); padding: calc(var(--u) * 2.2) calc(var(--u) * 3.4); border-radius: calc(var(--u) * 3);
+    background: var(--paper); color: var(--ink); opacity: 0; }
+  .card .g { font: calc(var(--u) * 12) / .9 var(--display); color: var(--ink); }
+  .card .sc { font: calc(var(--u) * 7) / 1 var(--display); }
+  .card .sc small { font-size: .45em; opacity: .55; }
+  .card .t { font: 700 calc(var(--u) * 2.4) var(--grotesk); letter-spacing: .16em; text-transform: uppercase; }
+  .card .ttl { font: calc(var(--u) * 4.2) / 1 var(--display); text-transform: uppercase; }
+  .foot { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; font: 600 calc(var(--u) * 2.6) var(--grotesk); color: var(--mut); }
+  .foot b { color: var(--paper); }
+
+  .s9x16 { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; row-gap: calc(var(--u) * 5); align-content: center; }
+  .s9x16 .head { flex-direction: column; align-items: flex-start; gap: calc(var(--u) * 2); }
+  .s9x16 .title { font-size: calc(var(--u) * 12); }
+  .s9x16 .av { width: calc(var(--u) * 50); }
+  .s9x16 .foot { display: none; }
+</style></head>
+<body><div class="poster">
+  <div class="bg"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="floor"></i></div>
+  <div class="head"><div class="display title">Every count.<br><span class="v">Scored.</span></div><div class="bpm"><i id="beat"></i>100 BPM · 8-COUNT</div></div>
+
+  <div class="stage">
+    <div class="av"><img id="m_grin" src="../../../data/tmp/promo/anim/art/mood_grin.png"><img id="m_focus" src="../../../data/tmp/promo/anim/art/mood_focus_closed.png">
+      <img id="m_pumped" class="flex" src="../../../data/tmp/promo/anim/art/mood_pumped_grin.png"><img id="m_enc" src="../../../data/tmp/promo/anim/art/mood_encourage_closed.png"></div>
+    <div class="word verdict cut" id="verdict"></div>
+    <div class="chip combo"><span class="big v" id="combo">×0</span>COMBO</div>
+  </div>
+
+  <div class="right">
+    <div class="lede">A ghost dances <b class="v">one beat ahead</b>. Every count is checked against a real dancer: <b>shape, timing, energy</b>.</div>
+    <div class="strip" id="strip"><i class="head-line" id="ph"></i></div>
+    <div class="legend"><span class="v">PERFECT</span><span class="cy">NICE</span><span class="rd">MISS</span></div>
+    <div class="card" id="card"><div class="g">A</div><div><div class="t">Score</div><div class="sc"><span id="score">0</span><small>/100</small></div></div>
+      <div><div class="t">Title</div><div class="ttl">Groove<br>Machine</div></div></div>
+  </div>
+
+  <div class="foot"><span><b>BrodieGroove</b> · a dance coach you FaceTime</span><span data-line="FaceTime">@brodiegroove · #BeatMyBrodie</span></div>
+</div>
+<script>
+  const BEAT = .6, N = 8, SEQ = 'ppnppmpp', START = 14;          // 100 BPM; the combo walks in at 14 and breaks on the miss
+  const NAME = { p: 'PERFECT', n: 'NICE', m: 'MISS' }, COL = { p: 'var(--volt)', n: 'var(--cyan)', m: 'var(--red)' };
+  const strip = document.getElementById('strip'), tiles = [];
+  for (let i = 0; i < N; i++) { const t = document.createElement('div'); t.className = 'tile'; t.textContent = i + 1; strip.appendChild(t); tiles.push(t); }
+  const $ = id => document.getElementById(id);
+  const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  window.onSeek = t => {
+    const end = N * BEAT, k = Math.floor(t / BEAT);            // count k is being danced; it lands (fills) when the playhead leaves it
+    const landed = Math.min(N, Math.floor(t / BEAT));
+    tiles.forEach((el, i) => { el.className = 'tile' + (i < landed ? ' ' + SEQ[i] : ''); });
+    const ph = $('ph'), sw = strip.clientWidth;
+    ph.style.display = t < end ? '' : 'none'; ph.style.left = (Math.min(t, end) / end * sw) + 'px';
+    let combo = START; for (let i = 0; i < landed; i++) combo = SEQ[i] === 'm' ? 0 : combo + 1;
+    $('combo').textContent = '×' + combo;
+    const last = landed ? SEQ[landed - 1] : null, since = t - landed * BEAT;
+    const v = $('verdict');
+    if (last && t < end + .9) { v.textContent = NAME[last]; v.style.color = COL[last]; v.style.scale = 1 + .35 * (1 - ease(since / .25)); v.style.opacity = 1; }
+    else v.style.opacity = 0;
+    const streak = (() => { let s = 0; for (let i = landed - 1; i >= 0 && SEQ[i] === 'p'; i--) s++; return s; })();
+    const mood = t >= end ? 'pumped' : last === 'm' ? 'enc' : streak >= 2 ? 'pumped' : landed ? 'grin' : 'focus';
+    ['grin', 'focus', 'pumped', 'enc'].forEach(m => $('m_' + m).classList.toggle('on', m === mood));
+    $('beat').style.opacity = (t % BEAT) < .15 && t < end ? 1 : .35;
+    const c = $('card'), r = (t - end - .3) / .5;                 // the grade card after the last count, gone before the loop restarts
+    c.style.opacity = t > 6.8 ? Math.max(0, (7.2 - t) / .4) : ease(r);
+    c.style.translate = `0 ${(1 - ease(r)) * 30}px`;
+    $('score').textContent = Math.round(87 * ease((t - end - .3) / 1.0));
+    tiles.forEach(el => { el.style.opacity = t > 6.8 ? Math.max(0, (7.2 - t) / .4) : 1; });
+  };
+</script>
+<script src="../config.js"></script><script src="anim.js"></script>
+</body></html>

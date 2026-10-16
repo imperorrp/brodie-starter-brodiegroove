@@ -3,7 +3,7 @@
 Ranked. `[ ]` open, `[~]` started, `[x]` done, `[!]` blocked. Tick things here; write the story of how in `../PROGRESS.md`;
 when a tick changes what works, update `STATUS.md`; when it changes a file's role, update `CODEBASE.md`.
 Sources folded in: `PLANNED_IMPROVEMENTS.md`, `team/docs/AUDIT_2026-10-11.md`, `CONVERSATION.md` §8,
-`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-15.
+`team/promo/STRATEGY.md`, the mismatches in `CODEBASE.md` §13. Updated 2026-10-16.
 
 The judged window is **Mon Oct 12 to Sun Oct 18**: most traction wins. Every engineering item below should earn a post.
 
@@ -53,6 +53,12 @@ from `PLANNED_IMPROVEMENTS.md` §4. Times: TikTok/Reels 6–9 PM, IG feed 11 AM�
 | Sat 10/17 | Which grade are you? #BeatMyBrodie weekend | Nothing new to build; push the fill-in template and reply to every tag | [ ] |
 | Sun 10/18 | Week one on the line: stats + scorecard wall | Fill `recap` in `config.json` from `GET /metrics` and `GET /dance/funnel`; re-render Day 7 | [ ] |
 | Every day | "Today's 8-count" story (`daily/daily_9x16_<day>.png`) | The daily key rotation (`choreo.DAILY_ROTATION`) matches `config.json` `daily_style` | [ ] |
+
+- [x] **Animated pieces** (2026-10-16): `promo/animate.py` + `promo/anim/`: 7 transparent stickers (GIF, WebP, green-screen MP4),
+      the incoming-call loop, the count timeline, three "missed calls from Brodie" gags, the stack diagram. Kit art only, cream-checked.
+- [ ] Post them: a sticker as the reply to every comment, one missed-calls gag a day, the stack loop on X / LinkedIn, the
+      call loop as the Story cover. Green-screen stickers over the real-call clip once it exists.
+- [ ] Re-run `python -m team.promo.animate` after `call_line` is set so every piece shows the line instead of the handle.
 
 Stretch posts if a day has room (each reuses existing routes): the **Break Room feed** (Brodie posts one line about each
 call to a public page, names stripped; "my AI dance coach talks about me behind my back"), the **spectator link** (a page

@@ -592,7 +592,10 @@ stickers are transparent and also get a 512 px animated WebP and a green-screen 
 `missed.html` (the "missed calls from Brodie" lock-screen gag, 3 variants, 9:16 + 4:5), `stack.html` (the architecture, 16:9).
 Brodie is kit art only: `export_art()` copies the kit PNGs and `avatar.py`'s mood sprites to `data/tmp/promo/anim/art/` and runs
 `check_cream.py`. `[data-line]` shows `config.json`'s `call_line`, or the handle and hashtag while it is empty. Output:
-`data/tmp/promo/anim/<piece>/` + `sheet.jpg`. Software rendering of the 1080-wide pages is slow (minutes per piece).
+`data/tmp/promo/anim/<piece>/` + `sheet.jpg`. The static background (blurred blobs, grain) is shot once per piece as a plate
+(`?plate=1`) and every frame is drawn over it (`?flat=<png>`): 4x faster per frame. Browsers close with DevTools
+`Browser.close` (on Windows the launched PID is only Edge's launcher; killing it leaked dozens of browsers). `--jobs` defaults
+to 2 (3 starved the 16 GB laptop). The full set takes ~25 min on this laptop.
 
 **Pitch video** (`team/video/`, 46 s of real footage): `scout.py` (contact sheets of eval captures) → `timeline.py` (the
 edit as data, 100 BPM) → `voice.py` (Gemini TTS Puck/Kore with transcription re-takes, via `facetime.cues_tts`) →
