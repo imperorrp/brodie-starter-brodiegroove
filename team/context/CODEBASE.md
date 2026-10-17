@@ -522,10 +522,10 @@ and `dance_loop.ps1` use this; with `DATABASE_URL` set the in-process copy also 
   worker's video full-screen, and fits setup, status and touch controls to phone widths and safe areas. Publishes the camera
   as `facetime-remote-video` (no simulcast) and the mic as `facetime-remote-audio` (the Chert bridge's names, so the worker
   binds to either), plays its audio, and sends `{"type":"dance_cmd","cmd":...}` from Pause / Repeat / Slower / Stop.
-- **`groove/index.html`** (1237) — the landing page (https://brodiegroove.vercel.app/), self-contained: hero with a beat
-  clock, demo phone mock, a 16-note rhythm mini-game, the six mode cards, coach styles, the 60/30/10 scoring section, the
-  flow diagram, FAQ, final CTA, waitlist modal. `CALL_URL = ''` (every "Call" button opens the waitlist);
-  `WAITLIST_URL` is the Google Form. `groove/assets/` holds the fonts and kit PNGs.
+- **`groove/index.html`** (1203) — the landing page (https://brodiegroove.vercel.app/), self-contained: hero with a beat clock,
+  demo phone mock, a 16-note rhythm mini-game, the six mode cards, coach styles, the 60/30/10 scoring section, the flow
+  diagram, FAQ and final CTA. Call buttons link directly to `facetime://+13102792297` (+1 (310) 279-2297);
+  `groove/assets/` holds the fonts and kit PNGs.
 - **`index.html`** (22) — fitness-era placeholder that dumps `/sessions/last`. Unused.
 - **`certs/`** — self-signed cert from `serve_web.py` (git-ignored).
 

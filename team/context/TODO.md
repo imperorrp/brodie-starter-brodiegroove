@@ -94,9 +94,9 @@ Wrapped" card. Keep battle, telephone and class as spoken words that work, not a
 - [ ] **`link_local.ps1`** should mint through `mint_link.py` (named dispatch, `.go_url`) as the comments claim.
 - [ ] **Install note** in both READMEs: `uv pip install -r requirements.txt -r team/requirements.txt` (pillow, segno and
       the noise-cancellation plugin were missing in this venv at one point).
-- [ ] **Landing page copy**: the hero says "Call Brodie and dance." with no number; show the slot times and a `facetime:`
-      link when the line is ours; make the six modes and three coach styles explicit; FAQ on privacy, the upper-body rule,
-      codes and squad tagging; Open Graph and Twitter card tags; a kit favicon.
+- [ ] **Landing page copy**: show the slot times; make the six modes and three coach styles explicit; FAQ on privacy, the
+      upper-body rule, codes and squad tagging; Open Graph and Twitter card tags; a kit favicon. The FaceTime number and
+      direct link are now shown.
 - [ ] **Live board embed** on the site (`/dance` leaderboard and the daily board, read-only) and the funnel on a dashboard.
 
 ## 3. Scorer: make the number mean something (the week's engineering core)

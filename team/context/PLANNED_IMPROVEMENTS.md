@@ -80,9 +80,9 @@ Keep battle, telephone and class as spoken words that work, not a menu; the v3 f
 ## 5. The site (`team/web/groove`)
 
 1. **The demo section needs a real clip** (the `#demo` block): a 20-second phone recording of a call, scorecard at the end.
-2. **"Call Brodie now" should be a `facetime:` link** to the line when it is ours, with the slot times shown; otherwise the
-   waitlist form (already wired) plus a "try it in Chrome" link that mints a demo-room token server-side (a backend route that
-   calls `mint_link.make`, rate-limited, no token in the page source).
+2. **"Call Brodie now"** links directly to `facetime://+13102792297` (+1 (310) 279-2297). Still show the slot times and add a
+   "try it in Chrome" link that mints a demo-room token server-side (a backend route that calls `mint_link.make`, rate-limited,
+   no token in the page source).
 3. **Live board embed**: the backend's `/dance` leaderboard and the daily board as a section, read-only, with the crew code
    explained; later the Break Room feed as its own section.
 4. **A scorecard gallery**: the OG images of consenting callers (opt-in on the card), the strongest social proof we can show.

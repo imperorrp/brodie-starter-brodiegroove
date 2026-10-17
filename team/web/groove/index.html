@@ -11,7 +11,7 @@
 BrodieGroove landing page. Self-contained: open the file directly or serve the folder (python -m http.server).
 Everything moves to one beat clock. With sound off it runs on performance.now; "Drop the beat" switches it to a
 Web Audio groove (kick, snare, hats, bass) and the visuals follow the audio clock, latency-compensated.
-Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one for the phone page).
+The call buttons open FaceTime directly to Brodie's line.
 -->
 <style>
   @font-face { font-family: 'Archivo Black'; src: url(assets/ArchivoBlack-Regular.ttf) format('truetype'); font-display: swap; }
@@ -352,20 +352,6 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   }
 
-  /* waitlist modal */
-  .wl { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
-  .wl[hidden] { display: none; }
-  .wl-back { position: absolute; inset: 0; background: rgba(10,10,11,.72); backdrop-filter: blur(8px); opacity: 0; transition: opacity .22s ease; }
-  .wl-card { position: relative; width: min(100%, 480px); background: var(--ink2); border: 1px solid var(--line); border-radius: 24px; padding: 28px 26px 24px; text-align: center;
-    box-shadow: 0 30px 80px -20px rgba(0,0,0,.8), 0 0 0 1px rgba(217,255,61,.08); opacity: 0; transform: translateY(16px) scale(.96); transition: opacity .22s ease, transform .26s cubic-bezier(.2,1.2,.4,1); }
-  .wl.in .wl-back { opacity: 1; } .wl.in .wl-card { opacity: 1; transform: none; }
-  .wl-bro { width: 120px; height: 120px; object-fit: contain; margin: -70px auto 6px; display: block; filter: drop-shadow(0 16px 24px rgba(0,0,0,.5)); }
-  .wl-pill { display: inline-block; background: var(--volt); color: var(--ink); font: 800 12px var(--grotesk); letter-spacing: .12em; padding: 5px 12px; border-radius: 999px; margin-bottom: 12px; }
-  .wl-card h3 { font: 400 clamp(24px,5vw,32px)/1.05 'Archivo Black', var(--grotesk); margin: 0 0 10px; letter-spacing: -.5px; }
-  .wl-card p { color: var(--mut); margin: 0 0 18px; font-size: 16px; }
-  .wl-card .cta-row { justify-content: center; }
-  .wl-card small { display: block; margin-top: 14px; color: var(--mut); font-size: 13px; }
-  .wl-x { position: absolute; top: 12px; right: 14px; background: none; border: 0; color: var(--mut); font-size: 22px; cursor: pointer; line-height: 1; }
 </style>
 </head>
 <body>
@@ -382,8 +368,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
       <a href="#faq">FAQ</a>
     </div>
     <div class="bpm-pill" title="Everything on this page moves to this beat"><i></i><span id="navBpm">100</span>&nbsp;BPM</div>
-    <a class="btn btn-ghost btn-sm waitlist-link" href="#">Join the waitlist</a>
-    <a class="btn btn-volt btn-sm call-link" href="#call">Call Brodie</a>
+    <a class="btn btn-volt btn-sm call-link" href="facetime://+13102792297">FaceTime Brodie</a>
   </div>
 </nav>
 
@@ -393,7 +378,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
   <div class="floor"></div>
   <div class="wrap">
     <div>
-      <div class="kicker reveal"><span>SOON</span>A dance coach you FaceTime &middot; waitlist open</div>
+      <div class="kicker reveal"><span>LIVE</span>FaceTime Brodie at +1 (310) 279-2297</div>
       <h1 class="title reveal d1" aria-label="Brodie Groove">
         <span class="row brodie" data-split>BRODIE</span>
         <span class="row groove" data-split>GROOVE</span>
@@ -403,7 +388,7 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
       <div class="cta-row reveal d3">
         <button class="btn btn-volt" id="beatBtn"><span class="eq"><span></span><span></span><span></span></span><span id="beatLbl">Drop the beat</span></button>
         <a class="btn btn-ghost" href="#play">Try the 16-beat challenge →</a>
-        <a class="btn btn-ghost waitlist-link" href="#">Join the waitlist</a>
+        <a class="btn btn-ghost call-link" href="facetime://+13102792297">FaceTime Brodie</a>
       </div>
       <div class="bpm-ctl reveal d4">
         <label for="bpm">TEMPO</label>
@@ -635,7 +620,8 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
       <div>
         <h2>Your first <span style="white-space:nowrap">8-count</span><br>is one call away.</h2>
         <p>Say hi, tell Brodie what you're into, and he'll pick a routine for you. Got a challenge code from a friend? Enter it here and say it on the call.</p>
-        <div class="cta-row"><a class="btn btn-dark call-link" href="#call">Call Brodie now</a><a class="btn btn-ghost waitlist-link" style="border-color:rgba(10,10,11,.3)" href="#">Join the waitlist</a><a class="btn btn-ghost" style="border-color:rgba(10,10,11,.3)" href="#play">Warm up first</a></div>
+        <p>FaceTime Brodie at <a class="call-link" href="facetime://+13102792297">+1 (310) 279-2297</a> to start dancing.</p>
+        <div class="cta-row"><a class="btn btn-dark call-link" href="facetime://+13102792297">FaceTime Brodie now</a><a class="btn btn-ghost" style="border-color:rgba(10,10,11,.3)" href="#play">Warm up first</a></div>
         <form class="codebox" id="codeForm" autocomplete="off">
           <input id="codeIn" inputmode="numeric" maxlength="4" placeholder="0000" aria-label="Four-digit challenge code">
           <button class="btn btn-dark btn-sm" type="submit">Lock in code</button>
@@ -656,22 +642,9 @@ Set CALL_URL below to the real call link (team/scripts/link_local.ps1 prints one
 
 <div class="toast" id="toast"></div>
 
-<div class="wl" id="wl" role="dialog" aria-modal="true" aria-labelledby="wlTitle" hidden>
-  <div class="wl-back" data-wl-close></div>
-  <div class="wl-card">
-    <button class="wl-x" type="button" aria-label="Close" data-wl-close>&times;</button>
-    <img class="wl-bro" src="assets/brodie-sit-wave.png" alt="">
-    <div class="wl-pill">COMING SOON</div>
-    <h3 id="wlTitle">Brodie's line opens in waves.</h3>
-    <p>Get on the waitlist and we'll FaceTime you when it's your turn. No app, no account, just a call.</p>
-    <div class="cta-row"><a class="btn btn-volt waitlist-link" href="#">Join the waitlist &rarr;</a><button class="btn btn-ghost" type="button" data-wl-close>Not now</button></div>
-    <small>Got a friend's code? Keep it. Codes work the moment your call goes live.</small>
-  </div>
-</div>
 <script>
 'use strict';
-const CALL_URL = '';  // set to the real call link; empty keeps the buttons scrolling to #call
-const WAITLIST_URL = 'https://forms.gle/dZ7rSLHjGAEncSzc8';  // the Google Form (team/docs/waitlist-form.md); every .waitlist-link opens it
+const CALL_URL = 'facetime://+13102792297';
 const C = { volt: '#D9FF3D', pink: '#FF3DA8', cyan: '#3DE0FF', amber: '#FFB13D', red: '#FF4D5E', paper: '#F4F4F0', ink: '#0A0A0B', mut: '#9A9DA4' };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -680,14 +653,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const root = document.documentElement;
 
-if (CALL_URL) $$('.call-link').forEach(a => { a.href = CALL_URL; a.target = '_blank'; a.rel = 'noopener'; });
-$$('.waitlist-link').forEach(a => { a.href = WAITLIST_URL; a.target = '_blank'; a.rel = 'noopener'; });
-const wl = $('#wl');
-function openWl() { if (!wl.hidden) return; wl.hidden = false; document.body.style.overflow = 'hidden'; requestAnimationFrame(() => requestAnimationFrame(() => wl.classList.add('in'))); setTimeout(() => wl.querySelector('.waitlist-link').focus(), 260); }
-function closeWl() { wl.classList.remove('in'); document.body.style.overflow = ''; setTimeout(() => { wl.hidden = true; }, 240); }
-$$('[data-wl-close]').forEach(el => el.addEventListener('click', closeWl));
-addEventListener('keydown', e => { if (e.key === 'Escape' && !wl.hidden) closeWl(); });
-if (!CALL_URL) $$('.call-link').forEach(a => a.addEventListener('click', e => { e.preventDefault(); openWl(); }));
+$$('.call-link').forEach(a => { a.href = CALL_URL; });
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -1174,7 +1140,7 @@ $('#codeIn').addEventListener('input', e => { e.target.value = e.target.value.re
 $('#codeForm').addEventListener('submit', e => {
   e.preventDefault(); const v = $('#codeIn').value, out = $('#codeOut');
   out.textContent = v.length === 4 ? `Code ${v} locked in. On the call, say "${v.split('').join(' ')}" and Brodie loads that ghost.` : 'Codes are four digits, like 4821.';
-  if (v.length === 4) { const fb = $('#finalBro'); fb.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-6deg) translateY(-14px)' }, { transform: 'rotate(4deg)' }, { transform: 'rotate(0)' }], { duration: 700, easing: 'cubic-bezier(.3,1.6,.5,1)' }); if (!CALL_URL) setTimeout(openWl, 500); }
+  if (v.length === 4) { const fb = $('#finalBro'); fb.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-6deg) translateY(-14px)' }, { transform: 'rotate(4deg)' }, { transform: 'rotate(0)' }], { duration: 700, easing: 'cubic-bezier(.3,1.6,.5,1)' }); }
 });
 
 /* ---------- reveal, counters, tilt ---------- */

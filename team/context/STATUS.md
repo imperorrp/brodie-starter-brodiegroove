@@ -18,14 +18,6 @@ joint balls, left side lighter, facing dot), the menu cards without their small 
 
 The deployment fixes are now versioned: Railpack/CPU dependencies with EGL/GLES, database-dependent HTTP health, and access-log suppression for join credentials. Native GitHub autodeploy is enabled on `main` after the owner installed the Railway App. The team supplied the private library ZIP and its signed URL is configured in Railway. GitHub push `c9f757f` automatically deployed successfully. Remote verification loaded 29 total keys (including all 24 supplied AIST keys), indexed 24 AIST phrases, and generated all 24 style/level combinations plus the daily challenge. HTTPS/database health and protected join dispatch passed; the new LiveKit worker registered and joined the Chert waiting room. A phone tester on 2026-10-15 hit "Sorry, I glitched" after every yes (routine generation raised on the empty pool) and a hands-up that never counted; both are fixed in code (routines fall back to the tracked Commons keys; a forgiving hands-up detector), unit + sim verified on a four-key library, deployed through GitHub; **not yet retried on a phone**.
 
-Upstream team status, 2026-10-15 about 01:45 ET (its cloud deployment statement predates the temporary operator deployment above): Tuesday's features are built: Brodie's face has moods (kit art only), and the scorecard
-QR opens a result page `/r/<code>` that unfurls as a preview card when pasted (it needs the deployed backend to be reachable). The repo is the public `imperorrp/ivyhacks-brodiegroove` (`origin`), `main`;
-the submission is in. The cloud box (Supabase + Railway, `team/cloud/`) is written and its Postgres engine verified against a
-local Postgres 17, but not yet deployed. On 2026-10-12 two bugs that broke every real call since build-day evening were fixed:
-Gemini failed to start (`audio_in.py`'s `RoomOptions` swap), so Brodie was silent, and the lite-model swap deadlocked the
-worker, so the video froze. A person then completed a Chrome call into the routine. The judged window is the posting week, **Mon Oct 12 to Sun Oct 18**: the winner is the entry with
-the most social traction, so everything from here is "one feature, one post, each day".
-
 ## 1. Repo, submission, shipping
 
 | Item | State |
@@ -37,7 +29,7 @@ the most social traction, so everything from here is "one feature, one post, eac
 | Post log at getbrodie.com/ivyhacks | not confirmed; log every post of the week there |
 | Landing page | live at https://brodiegroove.vercel.app/ (Vercel, static from `team/web/groove`); gh-pages is the fallback |
 | Cloud box: worker + API on Railway, temporary Railway Postgres (`team/cloud/README.md`) | **deployed 2026-10-14.** HTTPS health, DB roundtrip and LiveKit dispatch passed; full/lite pose load and blank-frame inference passed. AIST library loaded and all styles/levels plus daily generation verified remotely on 2026-10-15. Chert connector running continuously under the operator login service; no media acceptance. |
-| Waitlist | Google Form wired to every Call button (`WAITLIST_URL` in `groove/index.html`) |
+| Landing page call action | Every Call / FaceTime action opens FaceTime directly for +1 (310) 279-2297; waitlist links and modal removed |
 | Promo kit | built (`team/promo`), `config.json` has `call_line` and `call_url` empty, so every CTA still says "THE LINE OPENS MON 10.12" |
 | Pitch video / film | pipelines built; outputs live under `data/tmp/pitch/` and `data/tmp/film/` on this laptop only |
 | Animated pieces (`promo/animate.py`, `promo/anim/`) | **rendered 2026-10-16** on this laptop: 7 stickers, call loop, timeline, 3 missed-calls gags, stack diagram (`data/tmp/promo/anim/`, checked by eye; kit art cream-checked). Show the handle until `call_line` is set; not posted yet |
@@ -70,7 +62,7 @@ webcam) → **Chert line held** (`chert dev` connected from Windows) → **FaceT
 | Browser caller (any Chrome, Android), one-command test, headless test, named dispatch via `mint_link.py`, demo rooms | `web/phone.html`, `scripts/chrome.ps1`, `chrome_test.py`, `serve_web.py` | headless PASS (10-11 14:55 and 17:30 ET; 10-12 00:51 ET with Gemini speaking) + human runs (latest 10-12 01:08 ET). `chrome.ps1` starts its worker under `AGENT_NAME`; responsive portrait capture and safe-area controls updated, physical phone validation pending |
 | Chert line from Windows | `scripts/chert.ps1` + `chert_win_shim.js` | `chert doctor` green, `chert dev --agent dance-battle-agent-ivyhacks` connected, warm room held (16:12 ET). **No FaceTime call has landed on our worker** (the Mac behind the line did not answer; the slot then went to another team) |
 | Telemetry per call, `GET /metrics`, eval report, cue review CSV | `telemetry.py`, `eval/run_eval.py` | in place; eval needs the laptop to itself |
-| Landing page, waitlist, promo kit (8 days of posters, stories, reels, captions), pitch video, generated film | `web/groove`, `promo/`, `video/` | rendered on this laptop |
+| Landing page, promo kit (8 days of posters, stories, reels, captions), pitch video, generated film | `web/groove`, `promo/`, `video/` | landing page rendered on this laptop; FaceTime link configured, not verified on a physical device |
 
 Counts at the last pass: 171 pytest cases (113 functions, 10 files), 46 eval scenarios + duel, 14 selftest checks,
 20 HUD snapshots, 29 keys, 14 tools, 27 modules in `team/dance` plus tests and eval.
